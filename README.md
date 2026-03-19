@@ -1,7 +1,10 @@
 # 🧠 Context-Switcher
 
-> Akıllı Çalışma Alanı Mimarı — Tek komutla ortam geçişi
+[![PyPI version](https://img.shields.io/pypi/v/context-switcher.svg)](https://pypi.org/project/context-switcher/)
+[![CI Status](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
+> Akıllı Çalışma Alanı Mimarı — Tek komutla ortam geçişi
 Context-Switcher, gün içinde geçiş yaptığınız çalışma modlarını (Geliştirme, Ders, Eğlence) tek bir komutla tam anlamıyla "yaşayan" bir ortama dönüştüren bir CLI aracıdır.
 
 ## ✨ Özellikler
@@ -16,9 +19,15 @@ Context-Switcher, gün içinde geçiş yaptığınız çalışma modlarını (Ge
 
 ### Kurulum
 
+**Kullanıcılar İçin (Önerilen) ✨**
 ```bash
-git clone https://github.com/<kullanici>/context-switcher
-cd context-switcher
+pip install context-switcher
+```
+
+**Geliştiriciler İçin 🛠️**
+```bash
+git clone https://github.com/Shidori5417/Context-Switcher
+cd Context-Switcher
 python -m venv .venv
 .venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
 pip install -e ".[dev]"

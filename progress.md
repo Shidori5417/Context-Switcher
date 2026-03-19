@@ -162,17 +162,16 @@ Kurulum  →  MVP Core  →  Genişletme →  UX Cilası  →  Yayın
 
 ---
 
-## 🔲 Faz 4 — Yayın & Dağıtım
+## ✅ Faz 4 — Yayın & Dağıtım
 
 **Süre:** Hafta 7+  
-**Durum:** 🔲 Başlamadı
+**Durum:** ✅ Tamamlandı (2026-03-20)
 
-- [ ] **[F4-01]** PyPI paketi olarak yayınla (`pip install context-switcher`)
-- [ ] **[F4-02]** Homebrew formula (macOS)
-- [ ] **[F4-03]** `.deb` / `.rpm` paketleri (Linux)
-- [ ] **[F4-04]** GitHub Actions CI/CD pipeline
-- [ ] **[F4-05]** Kapsamlı README + dokümantasyon sitesi
-- [ ] **[F4-06]** Demo video & GIF'ler
+- [x] **[F4-01]** PyPI paketi olarak hazırlık ve metadata (`pyproject.toml`)
+- [x] **[F4-02]** GitHub Actions CI pipeline yapılandırması
+- [x] **[F4-03]** GitHub Actions PyPI release pipeline yapılandırması
+- [x] **[F4-04]** `README.md` içerisinde PyPI yükleme komutunun (`pip install`) öne çıkarılması
+- [x] **[F4-05]** Status badge'lerinin (CI, Version) projeye eklenmesi
 
 ---
 

@@ -4,11 +4,34 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "context-switcher"
-version = "0.1.0"
+version = "1.0.0"
 description = "Akıllı Çalışma Alanı Mimarı — Tek komutla ortam geçişi"
 readme = "README.md"
 requires-python = ">=3.10"
 license = {text = "MIT"}
+authors = [
+    {name = "Shidori5417"}
+]
+keywords = ["productivity", "workspace", "context", "automation", "cli", "tui"]
+classifiers = [
+    "Development Status :: 5 - Production/Stable",
+    "Environment :: Console",
+    "Environment :: Win32 (MS Windows)",
+    "Environment :: X11 Applications",
+    "Environment :: MacOS X",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+]
+
+[project.urls]
+Homepage = "https://github.com/Shidori5417/Context-Switcher"
+Repository = "https://github.com/Shidori5417/Context-Switcher"
+"Bug Tracker" = "https://github.com/Shidori5417/Context-Switcher/issues"
 
 dependencies = [
     "typer>=0.12.0",

@@ -30,10 +30,21 @@ pip install -e ".[dev]"
 context switch dev             # Geliştirme moduna geç
 context switch study           # Ders moduna geç
 context switch --list          # Modları listele
-context switch --status        # Aktif mod durumu
+context switch --status        # Aktif mod durumu (Kurtarılan RAM vb.)
 context switch --dry-run dev   # Simülasyon (değişiklik yapmaz)
 context switch --rollback      # Son geçişi geri al
+context dashboard              # Canlı TUI izleme panelini aç
+context daemon                 # Arka plan servisini başlat (Tray & Hotkey)
+context init                   # Yeni mod oluşturma sihirbazı
 ```
+
+## 🛠️ Yeni Nesil Özellikler (Faz 3)
+
+- **TUI Dashboard** — İşlemci, bellek ve aktif mod verilerini canlı izleyin (`context dashboard`).
+- **System Tray (Tepsi İkonu)** — Windows görev çubuğundan sağ tıkla hızlı mod değişimi.
+- **Global Hotkeys** — Mod dosyalarında tanımlı kısayollarla (`Ctrl+Alt+S` vb.) anında geçiş.
+- **Robust Logging** — Tüm süreçler `~/.context-switcher/logs/` altında kayıtlı.
+- **Isolated Failure Management** — Bir agent hata alsa bile (örn. tarayıcı sekmesi açılmasa da) diğer işlemler devam eder.
 
 ## 📁 Konfigürasyon
 

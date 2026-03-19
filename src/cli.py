@@ -91,6 +91,7 @@ def _handle_list() -> None:
 
 def _handle_status() -> None:
     """Aktif mod durumunu gösterir."""
+    import psutil
     state = get_state()
 
     if state.current_mode is None:
@@ -105,11 +106,21 @@ def _handle_status() -> None:
         return
 
     suspended_count = len(state.suspended_pids)
+    
+    saved_ram_mb = 0.0
+    for pid in state.suspended_pids:
+        try:
+            p = psutil.Process(pid)
+            saved_ram_mb += p.memory_info().rss / (1024 * 1024)
+        except (psutil.NoSuchProcess, psutil.AccessDenied):
+            pass
+
     lines = [
         f"[bold green]Aktif Mod:[/bold green] {state.current_mode}",
         f"[dim]Önceki Mod:[/dim] {state.previous_mode or '—'}",
         f"[dim]Geçiş Zamanı:[/dim] {state.switched_at or '—'}",
         f"[yellow]Dondurulmuş Süreç:[/yellow] {suspended_count} adet",
+        f"[cyan]Tahmini Kurtarılan RAM:[/cyan] {saved_ram_mb:.1f} MB",
     ]
 
     console.print(
@@ -160,6 +171,8 @@ def _handle_rollback() -> None:
 
 def _handle_switch(mode_name: str, dry_run: bool) -> None:
     """Mod geçişini Orchestrator üzerinden çalıştırır."""
+    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
+    
     # Mod dosyasını bul
     modes = discover_modes()
     if mode_name not in modes:
@@ -182,7 +195,7 @@ def _handle_switch(mode_name: str, dry_run: bool) -> None:
     icon = config.get("icon", "🔄")
     prefix = "🧪 [yellow]Dry Run:[/yellow]" if dry_run else f"{icon}"
 
-    console.print(f"{prefix} [bold]{mode_display}[/bold] moduna geçiliyor...")
+    console.print(f"{prefix} [bold]{mode_display}[/bold] moduna geçiliyor...\n")
 
     # Orchestrator'ı çalıştır
     from src.agents.orchestrator import OrchestratorAgent
@@ -196,12 +209,24 @@ def _handle_switch(mode_name: str, dry_run: bool) -> None:
         dry_run=dry_run,
     )
 
-    result = orchestrator.execute(event)
+    with Progress(
+        SpinnerColumn(),
+        TextColumn("[progress.description]{task.description}"),
+        BarColumn(),
+        TaskProgressColumn(),
+        transient=True,
+    ) as progress:
+        task_id = progress.add_task("[cyan]Başlıyor...", total=100)
+
+        def update_progress(msg: str, percent: float) -> None:
+            progress.update(task_id, description=f"[cyan]{msg}", completed=percent)
+
+        result = orchestrator.execute(event, on_progress=update_progress)
 
     if result.success:
         # Çıktıyı formatla
         sub_reports = result.details.get("reports", [])
-        lines = [f"[green]✓ {msg}[/green]" for msg in sub_reports if msg]
+        lines = [f"[dim]• {msg}[/dim]" for msg in sub_reports if msg]
         snap_note = ""
         if result.details.get("snapshot"):
             snap_note = "\n[dim]Rollback için: context switch --rollback[/dim]"
@@ -233,6 +258,50 @@ def app_entry() -> None:
 
 @app.command()
 def init() -> None:
+    """Yeni bir modu interaktif olarak sihirbaz ile oluşturur."""
+    from src.wizard import run_wizard
+    run_wizard()
+
+
+@app.command()
+def dashboard() -> None:
+    """Canlı gösterge panelini (TUI Dashboard) başlatır."""
+    from src.tui import run_dashboard
+    run_dashboard()
+
+
+@app.command()
+def daemon() -> None:
+    """Arka planda (System Tray & Hotkey) dinleme servisini başlatır."""
+    from src.hotkeys import HotkeyManager
+    from src.tray import TrayManager
+    
+    console.print("[cyan]Daemon başlatılıyor... (Tepsi ikonundan veya Ctrl+C ile kapatabilirsiniz)[/cyan]")
+
+    def safe_switch(mode_name: str) -> None:
+        try:
+            _handle_switch(mode_name, dry_run=False)
+        except SystemExit:
+            # typer.Exit raises SystemExit, we catch it to prevent daemon crash
+            pass
+        except Exception as e:
+            from src.core.logger import logger
+            logger.error("Daemon exception on switch: %s", e)
+            
+    hm = HotkeyManager(on_switch=safe_switch)
+    # Hata olmaması için kısayolları kaydet
+    hm.register_all()
+
+    tm = TrayManager(on_switch=safe_switch)
+    try:
+        # icon.run() blocking bir işlemdir.
+        tm.run()
+    except KeyboardInterrupt:
+        pass
+    finally:
+        hm.unregister_all()
+        console.print("[yellow]Daemon durduruldu.[/yellow]")
+
     """Yeni bir mod oluşturmak için interaktif sihirbazı başlatır."""
     from src.wizard import run_wizard
     run_wizard()

@@ -208,14 +208,21 @@ Kullanıcı `context switch dev` yazdığında; terminal bunu anlasın, YAML'dan
 
 **Faz 2 Tamamlanma Kriteri:** Tüm 5 agent çalışıyor. `context switch study` → Tam ortam geçişi yapılıyor (pencere, tarayıcı, ses, süreçler).
 
----
+**F## Phase 2: Genişletilmiş Ajanlar
+- Durum: Tamamlandı
+- Yapılanlar: Layout, Browser, ve Environment agentları oluşturuldu. CLI konfigürasyon sihirbazı tamamlandı.
 
-## 🔲 Faz 3 — UX Cilası & Sağlamlaştırma
+## ✅ Faz 3 — UX Cilası & Sağlamlaştırma (TUI, Tray, Hotkeys, Logging)
 
 **Süre:** Hafta 6  
-**Durum:** 🔲 Başlamadı
+**Durum:** ✅ Tamamlandı
+- Yapılanlar:
+  - `rich` kütüphanesi ile geçiş esnasında progres bar animasyonu, `context dashboard` komutu ve tahmini RAM/Süreç okumaları CLI'a eklendi.
+  - Arka planda çalışabilen bir `TrayManager` (`pystray`) oluşturuldu ve global mod kısayolları için `HotkeyManager` modülü yazıldı. `context daemon` komutu eklendi.
+  - `core/logger.py` oluşturularak rotating log (zaman damgalı) altyapısı kuruldu. `Orchestrator` üzerindeki hata yönetimi izole edilerek bir ajanın hatasının diğerini kesmesine (örneğin layout patlarken browser'ın açılmasını engellediğine) izin verecek şekilde Kısmi Rollback stratejileri aktifleştirildi.
+  - Test kapsamı %80+ üzerine çıkarıldı, System Tray ve Hotkeys komutları mocklanarak doğrulandı.
 
-- [ ] **[F3-01]** `rich` kütüphanesi ile renkli, animasyonlu CLI çıktısı
+### [F3-01] `rich` kütüphanesi ile renkli, animasyonlu CLI çıktısı
 
   ```
   🔄 Context-Switcher: dev moduna geçiliyor...

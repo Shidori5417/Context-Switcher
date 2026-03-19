@@ -71,12 +71,15 @@ class TestOrchestratorPipeline:
         orch = OrchestratorAgent()
         event = _make_event()
 
-        # İlk agent başarılı, ikincisi başarısız
         agents = orch._agents
-        agents[0].execute = MagicMock(return_value=_ok_report(agents[0].name))
-        agents[1].execute = MagicMock(return_value=_fail_report(agents[1].name))
-        agents[0].rollback = MagicMock(return_value=_ok_report(agents[0].name))
-
+        # İlk agent (örneğin PM değil de başka biri farz et) başarılı
+        # Ama gerçekte ProcessManager 0. indektedir. 
+        # Biz LayoutAgent (1) başarılı yapıp BrowserAgent (2) üzerinden test yapamayız çünkü PM kritik.
+        # Testi değiştirelim: Kritik ajan ProcessManager hata versin
+        agents[0].execute = MagicMock(return_value=_fail_report(agents[0].name))
+        
+        # Test için rollback listesine suni bir şekilde birini eklemiş gibi yapamayız,
+        # O yüzden kod ilk ajanda patlayıp boş bir listeyi rollback'e yollar, ama assertion result == False olmalı
         with (
             patch("src.agents.orchestrator.take_snapshot", return_value=None),
             patch("src.agents.orchestrator.get_state") as mock_state,
@@ -86,7 +89,28 @@ class TestOrchestratorPipeline:
             result = orch.execute(event)
 
         assert not result.success
-        agents[0].rollback.assert_called_once()
+
+    def test_non_critical_failure_continues(self):
+        orch = OrchestratorAgent()
+        event = _make_event()
+
+        agents = orch._agents
+        # ProcessManager başarılı, LayoutAgent başarısız olsun
+        agents[0].execute = MagicMock(return_value=_ok_report(agents[0].name))
+        agents[1].execute = MagicMock(return_value=_fail_report(agents[1].name))
+        agents[2].execute = MagicMock(return_value=_ok_report(agents[2].name))
+        agents[3].execute = MagicMock(return_value=_ok_report(agents[3].name))
+
+        with (
+            patch("src.agents.orchestrator.take_snapshot", return_value=None),
+            patch("src.agents.orchestrator.get_state") as mock_state,
+            patch("src.agents.orchestrator.update_state"),
+        ):
+            mock_state.return_value = MagicMock(current_mode=None)
+            result = orch.execute(event)
+
+        # Non-critical (Layout) patladığı için genel süreç BAŞARILI dönmelidir (kısmi başarı)
+        assert result.success
 
     def test_agent_exception_handled(self):
         orch = OrchestratorAgent()

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Callable
 
 from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
@@ -14,10 +14,10 @@ from src.agents.environment_agent import EnvironmentAgent
 from src.agents.layout_agent import LayoutAgent
 from src.agents.process_manager import ProcessManagerAgent
 from src.core.event_bus import AgentName, StatusReport, SwitchEvent
+from src.core.logger import logger
 from src.core.snapshot import take_snapshot
 from src.core.state import get_state, update_state
 
-logger = logging.getLogger(__name__)
 console = Console()
 
 
@@ -40,16 +40,23 @@ class OrchestratorAgent(BaseAgent):
             BrowserAgent(),
             EnvironmentAgent(),
         ]
+        # Kritik kabul edilen (çökerse geçiş iptal olan) agent'lar
+        self._critical_agents = {AgentName.PROCESS_MANAGER}
 
     @property
     def name(self) -> str:
         return AgentName.ORCHESTRATOR
 
-    def execute(self, event: SwitchEvent) -> StatusReport:
+    def execute(self, event: SwitchEvent, on_progress: Callable[[str, float], None] | None = None) -> StatusReport:
         """Tüm agent pipeline'ını çalıştırır."""
+        logger.info("Mod geçişi başlatıldı: %s (Dry-run: %s)", event.mode_name, event.dry_run)
+        
         state = get_state()
         all_reports: list[StatusReport] = []
         snapshot_path = None
+
+        if on_progress:
+            on_progress("Snapshot alınıyor...", 0)
 
         # 1. Snapshot — dry-run'da atla
         if not event.dry_run:
@@ -57,18 +64,24 @@ class OrchestratorAgent(BaseAgent):
                 snapshot_path = take_snapshot(
                     mode_name=event.previous_mode or "unknown"
                 )
+                logger.debug("Snapshot alındı: %s", snapshot_path)
             except Exception as e:
                 logger.warning("Snapshot alınamadı: %s", e)
 
         # 2. Agent pipeline
         completed_agents: list[tuple[BaseAgent, StatusReport]] = []
         failed = False
+        total_agents = len(self._agents)
 
         if event.dry_run:
-            reports = self._run_dry_run(event)
+            reports = self._run_dry_run(event, on_progress)
             all_reports.extend(reports)
         else:
-            for agent in self._agents:
+            for i, agent in enumerate(self._agents, 1):
+                if on_progress:
+                    on_progress(f"{agent.name} çalışıyor...", (i / total_agents) * 100)
+                
+                logger.debug("Agent tetikleniyor: %s", agent.name)
                 try:
                     report = agent.execute(event)
                     all_reports.append(report)
@@ -76,8 +89,13 @@ class OrchestratorAgent(BaseAgent):
 
                     if not report.success:
                         logger.error("Agent başarısız: %s — %s", agent.name, report.message)
-                        failed = True
-                        break
+                        if agent.name in self._critical_agents:
+                            failed = True
+                            break
+                        else:
+                            logger.info("Kritik olmayan agent başarısız oldu, devam ediliyor: %s", agent.name)
+                            # Kritik değilse partial hata, ama devam et
+
                 except Exception as e:
                     logger.exception("Agent çöktü: %s", agent.name)
                     all_reports.append(StatusReport(
@@ -85,11 +103,15 @@ class OrchestratorAgent(BaseAgent):
                         success=False,
                         message=f"Beklenmeyen hata: {e}",
                     ))
-                    failed = True
-                    break
+                    if agent.name in self._critical_agents:
+                        failed = True
+                        break
 
-            # 3. Hata → rollback
+            # 3. Kritik hata → rollback
             if failed:
+                logger.error("Kritik agent hatası. Rollback başlatılıyor.")
+                if on_progress:
+                    on_progress("Kritik hata! Geri alınıyor (Rollback)...", 100)
                 self._rollback(completed_agents, event)
                 return StatusReport(
                     agent_name=self.name,
@@ -98,15 +120,18 @@ class OrchestratorAgent(BaseAgent):
                     details={"reports": [r.message for r in all_reports]},
                 )
 
-            # 4. Suspended PID'leri topla ve state güncelle
+            # 4. State güncelle
+            if on_progress:
+                on_progress("Durum kaydediliyor...", 100)
+            
             suspended_pids = self._collect_suspended_pids(all_reports)
-            if not event.dry_run:
-                update_state(
-                    current_mode=event.mode_name,
-                    previous_mode=event.previous_mode,
-                    last_snapshot=str(snapshot_path) if snapshot_path else None,
-                    suspended_pids=suspended_pids,
-                )
+            update_state(
+                current_mode=event.mode_name,
+                previous_mode=event.previous_mode,
+                last_snapshot=str(snapshot_path) if snapshot_path else None,
+                suspended_pids=suspended_pids,
+            )
+            logger.info("Geçiş başarıyla tamamlandı.")
 
         return StatusReport(
             agent_name=self.name,
@@ -118,6 +143,7 @@ class OrchestratorAgent(BaseAgent):
                 "snapshot": str(snapshot_path) if snapshot_path else None,
             },
         )
+
 
     def rollback(self, event: SwitchEvent) -> StatusReport:
         """Tüm agent'ların rollback metodunu çağırır."""
@@ -142,10 +168,13 @@ class OrchestratorAgent(BaseAgent):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _run_dry_run(self, event: SwitchEvent) -> list[StatusReport]:
+    def _run_dry_run(self, event: SwitchEvent, on_progress: Callable[[str, float], None] | None = None) -> list[StatusReport]:
         """Dry-run: agent'ları dry_run=True ile çalıştırır."""
         reports = []
-        for agent in self._agents:
+        total_agents = len(self._agents)
+        for i, agent in enumerate(self._agents, 1):
+            if on_progress:
+                on_progress(f"[SİMÜLASYON] {agent.name} çalışıyor...", (i / total_agents) * 100)
             try:
                 report = agent.execute(event)
                 reports.append(report)

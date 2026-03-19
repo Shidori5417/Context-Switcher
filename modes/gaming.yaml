@@ -21,6 +21,7 @@ layout:
   primary_app: "steam"
 
 browser:
+  app: "default"
   profile: "Personal"
   restore_session: false
   tab_groups:

@@ -22,13 +22,14 @@ layout:
   primary_app: "notion"
 
 browser:
-  profile: "Study"
+  app: "default"
+  profile: "Work"
   restore_session: false
   tab_groups:
     - name: "Research"
       tabs:
         - "https://scholar.google.com"
-        - "https://en.wikipedia.org"
+        - "https://en.wikipedia.com"
         - "https://chatgpt.com"
     - name: "Learning Platforms"
       tabs:

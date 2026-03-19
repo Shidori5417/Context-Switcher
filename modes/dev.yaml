@@ -24,6 +24,7 @@ layout:
   primary_app: "code"
 
 browser:
+  app: "default"
   profile: "Work"
   restore_session: true
   tab_groups:

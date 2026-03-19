@@ -179,20 +179,28 @@ class BrowserAgent(BaseAgent):
             )
 
         # CDP kontrolü
+        app_choice = browser_cfg.get("app", "default").lower()
         if not self._cdp.is_available():
-            # Tarayıcı yok mu? Başlatmayı dene
-            browser_info = detect_browser()
-            if browser_info:
-                browser_name, browser_path = browser_info
-                logger.info("CDP kapalı. %s başlatılıyor...", browser_name)
-                launch_browser_with_cdp(browser_path, profile)
-                self._cdp._available = None  # Önbelleği temizle
+            # Tarayıcı yok mu ve spesifik olarak Chrome/Edge algıla demiş miyiz (default ise atlat)?
+            if app_choice != "default":
+                browser_info = detect_browser()
+                if browser_info:
+                    browser_name, browser_path = browser_info
+                    logger.info("CDP kapalı. %s başlatılıyor...", browser_name)
+                    launch_browser_with_cdp(browser_path, profile)
+                    self._cdp._available = None  # Önbelleği temizle
 
-            if not self._cdp.is_available():
+            if not self._cdp.is_available() or app_choice == "default":
+                import webbrowser
+                logger.info("CDP pasif veya 'default' tarayıcı seçili. Sistem varsayılan tarayıcısı sekme açacak.")
+                opened: int = 0
+                for url in target_urls:
+                    if webbrowser.open(url):
+                        opened += 1
                 return StatusReport(
-                    agent_name=self.name, success=True,  # Başarısız ama bloke etme
-                    message="Browser: CDP bağlantısı kurulamadı. Tarayıcı atlandı.",
-                    details={"hint": "Tarayıcıyı --remote-debugging-port=9222 ile başlatın."},
+                    agent_name=self.name, success=True,
+                    message=f"Browser: {opened}/{len(target_urls)} sekme varsayılan tarayıcıyla açıldı.",
+                    details={"hint": "Varsayılan tarayıcı kullanıldığından oturum kaydı alınamadı.", "opened": opened},
                 )
 
         # Mevcut sekmeleri yedekle

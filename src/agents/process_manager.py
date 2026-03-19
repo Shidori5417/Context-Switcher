@@ -175,6 +175,9 @@ class ProcessManagerAgent(BaseAgent):
             combined_report.skipped.extend(report.skipped)
             combined_report.errors.extend(report.errors)
 
+        # Hata anında rollback fırlatılabilmesi için anlık olarak sakla
+        self._last_suspended_pids = all_suspended_pids
+
         # 2. Start
         if start_list:
             report = self.start_processes(start_list, dry_run=event.dry_run)
@@ -197,14 +200,22 @@ class ProcessManagerAgent(BaseAgent):
         )
 
     def rollback(self, event: SwitchEvent) -> StatusReport:
-        """Geçişi geri alır: suspended_pids'i event'in details'ından okur."""
-        # Orchestrator rollback sırasında details['suspended_pids'] geçirir
-        pids: list[int] = []
+        """Geçişi geri alır: state.json ve geçici bellekten PID'leri okur."""
+        from src.core.state import get_state
+        state = get_state()
+        
+        pids: list[int] = list(state.suspended_pids)
+        pids.extend(getattr(self, "_last_suspended_pids", []))
+        pids = list(set(pids)) # Benzersiz
+        
         report = self.resume_processes(pids)
+        if hasattr(self, "_last_suspended_pids"):
+            self._last_suspended_pids = []
+
         return StatusReport(
             agent_name=self.name,
             success=True,
-            message=f"Rollback: {len(report.resumed)} süreç devam ettirildi.",
+            message=f"Rollback: {len(report.resumed)} süreç uyandırıldı.",
             details={"resumed_pids": [a.pid for a in report.resumed]},
         )
 
@@ -263,19 +274,36 @@ class ProcessManagerAgent(BaseAgent):
                                  error=f"Yetki hatası: {e}")
 
     def _start_one(self, cmd: str, dry_run: bool) -> ProcessAction:
+        import os
+        exe_name = cmd.split()[0]
         try:
             if not dry_run:
-                subprocess.Popen(
-                    cmd.split(),
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    start_new_session=True,
-                )
-            return ProcessAction(pid=0, name=cmd.split()[0], action="started")
+                # Windows özel kontrolleri ve .cmd wrapper'ı için shell=True kullanılabilir
+                # ama güvenlik açısından önce direkt çalıştırmayı deniyoruz
+                try:
+                    subprocess.Popen(
+                        cmd.split(),
+                        stdout=subprocess.DEVNULL,
+                        stderr=subprocess.DEVNULL,
+                        start_new_session=True,
+                    )
+                except FileNotFoundError:
+                    if os.name == "nt" and not exe_name.endswith(".cmd") and not exe_name.endswith(".exe"):
+                        # 'code' Windows'ta 'code.cmd' dosyasıdır ve shell komutudur.
+                        subprocess.Popen(
+                            cmd,
+                            stdout=subprocess.DEVNULL,
+                            stderr=subprocess.DEVNULL,
+                            shell=True,
+                            start_new_session=True,
+                        )
+                    else:
+                        raise
+            return ProcessAction(pid=0, name=exe_name, action="started")
         except FileNotFoundError:
             return ProcessAction(
                 pid=0, name=cmd, action="error",
-                error=f"Uygulama bulunamadı: {cmd.split()[0]!r}",
+                error=f"Uygulama veya komut bulunamadı: {exe_name!r}",
             )
         except Exception as e:
             return ProcessAction(pid=0, name=cmd, action="error", error=str(e))

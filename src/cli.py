@@ -224,10 +224,18 @@ def _handle_switch(mode_name: str, dry_run: bool) -> None:
         raise typer.Exit(1)
 
 
+
 def app_entry() -> None:
     """pyproject.toml entry point."""
     _fix_encoding()
     app()
+
+
+@app.command()
+def init() -> None:
+    """Yeni bir mod oluşturmak için interaktif sihirbazı başlatır."""
+    from src.wizard import run_wizard
+    run_wizard()
 
 
 if __name__ == "__main__":

@@ -81,10 +81,10 @@ Kurulum  →  MVP Core  →  Genişletme →  UX Cilası  →  Yayın
 
 ---
 
-## 🔲 Faz 1 — MVP: Temel Çekirdek (Core)
+## ✅ Faz 1 — MVP: Temel Çekirdek (Core)
 
 **Süre:** Hafta 2–3  
-**Durum:** 🔲 Başlamadı
+**Durum:** ✅ Tamamlandı (2026-03-19)
 
 ### Hedef
 

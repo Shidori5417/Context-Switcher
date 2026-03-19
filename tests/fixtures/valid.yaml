@@ -1,0 +1,7 @@
+icon: 🧪
+name: Test Modu
+processes:
+  start:
+  - vscode
+  suspend:
+  - discord

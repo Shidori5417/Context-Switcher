@@ -1,0 +1,45 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "context-switcher"
+version = "0.1.0"
+description = "Akıllı Çalışma Alanı Mimarı — Tek komutla ortam geçişi"
+readme = "README.md"
+requires-python = ">=3.10"
+license = {text = "MIT"}
+
+dependencies = [
+    "typer[all]>=0.9.0",
+    "psutil>=5.9.0",
+    "PyYAML>=6.0",
+    "plyer>=2.1.0",
+    "rich>=13.0.0",
+    "jsonschema>=4.17.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+    "pytest-mock>=3.10",
+    "ruff>=0.4.0",
+    "pre-commit>=3.0",
+]
+
+[project.scripts]
+context = "src.cli:app_entry"
+
+[tool.setuptools.packages.find]
+include = ["src*"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "N", "UP"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["."]

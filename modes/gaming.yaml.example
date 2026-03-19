@@ -1,0 +1,40 @@
+# Oyun/Eğlence Modu — Örnek Konfigürasyon
+
+name: "Oyun Modu"
+icon: "🎮"
+hotkey: "Ctrl+Alt+G"
+
+processes:
+  start:
+    - steam
+    - discord
+  suspend:
+    - vscode
+    - docker
+    - slack
+
+layout:
+  workspace: 3
+  arrangement: fullscreen
+  primary_app: steam
+
+browser:
+  profile: Personal
+  restore_session: false
+  tab_groups:
+    - name: Gaming
+      tabs:
+        - "https://store.steampowered.com"
+        - "https://twitch.tv"
+
+environment:
+  volume: 80
+  notifications:
+    mute:
+      - slack
+    allow:
+      - discord
+      - steam
+  music:
+    app: spotify
+    playlist: "Gaming Mix"

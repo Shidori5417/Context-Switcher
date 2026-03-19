@@ -1,0 +1,143 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "Context-Switcher Mode Configuration",
+  "description": "YAML mod dosyalarının yapısını tanımlayan JSON Schema",
+  "type": "object",
+  "required": ["name"],
+  "properties": {
+    "name": {
+      "type": "string",
+      "description": "Modun görüntülenen adı"
+    },
+    "icon": {
+      "type": "string",
+      "description": "Mod ikonu (emoji)",
+      "maxLength": 4
+    },
+    "hotkey": {
+      "type": "string",
+      "description": "Klavye kısayolu (örn: Ctrl+Alt+D)"
+    },
+    "processes": {
+      "type": "object",
+      "description": "Süreç yönetimi konfigürasyonu",
+      "properties": {
+        "start": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Başlatılacak uygulamalar"
+        },
+        "suspend": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Dondurulacak uygulamalar"
+        },
+        "stop": {
+          "type": "array",
+          "items": { "type": "string" },
+          "description": "Kapatılacak uygulamalar"
+        }
+      },
+      "additionalProperties": false
+    },
+    "layout": {
+      "type": "object",
+      "description": "Pencere düzeni konfigürasyonu",
+      "properties": {
+        "workspace": {
+          "type": "integer",
+          "minimum": 1,
+          "description": "Sanal masaüstü numarası"
+        },
+        "arrangement": {
+          "type": "string",
+          "enum": ["split-left-right", "triple-column", "main-secondary", "fullscreen", "custom"],
+          "description": "Pencere düzeni şablonu"
+        },
+        "primary_app": {
+          "type": "string",
+          "description": "Ana uygulama"
+        }
+      },
+      "additionalProperties": false
+    },
+    "browser": {
+      "type": "object",
+      "description": "Tarayıcı konfigürasyonu",
+      "properties": {
+        "profile": {
+          "type": "string",
+          "description": "Tarayıcı profili"
+        },
+        "restore_session": {
+          "type": "boolean",
+          "description": "Önceki oturumu geri yükle"
+        },
+        "tab_groups": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["name", "tabs"],
+            "properties": {
+              "name": {
+                "type": "string",
+                "description": "Sekme grubu adı"
+              },
+              "tabs": {
+                "type": "array",
+                "items": { "type": "string", "format": "uri" },
+                "description": "Sekme URL'leri"
+              }
+            },
+            "additionalProperties": false
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    "environment": {
+      "type": "object",
+      "description": "Çevre konfigürasyonu (ses, bildirim, müzik)",
+      "properties": {
+        "volume": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 100,
+          "description": "Sistem ses seviyesi (%)"
+        },
+        "notifications": {
+          "type": "object",
+          "properties": {
+            "mute": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Bildirimi sessize alınacak uygulamalar"
+            },
+            "allow": {
+              "type": "array",
+              "items": { "type": "string" },
+              "description": "Bildirimine izin verilen uygulamalar"
+            }
+          },
+          "additionalProperties": false
+        },
+        "music": {
+          "type": "object",
+          "properties": {
+            "app": {
+              "type": "string",
+              "description": "Müzik uygulaması"
+            },
+            "playlist": {
+              "type": "string",
+              "description": "Çalma listesi adı veya URI"
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    }
+  },
+  "additionalProperties": false
+}

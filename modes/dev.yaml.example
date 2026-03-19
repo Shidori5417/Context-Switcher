@@ -8,7 +8,7 @@ hotkey: "Ctrl+Alt+D"
 processes:
   start:
     - vscode
-    - docker
+    - docker@
   suspend:
     - discord
     - steam

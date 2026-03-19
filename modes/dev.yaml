@@ -1,0 +1,50 @@
+# Geliştirme Modu — Aktif Konfigürasyon
+# Bu dosya Orchestrator tarafından 'context switch dev' komutu ile okunur.
+
+name: "Geliştirme Modu"
+icon: "💻"
+hotkey: "ctrl+alt+d" # Global kısayol
+
+processes:
+  # Mod başlatıldığında açılacak uygulamalar
+  start:
+    - code # VS Code (genelde 'code' olarak çağrılır)
+    - docker # Docker Desktop
+    - terminal # Windows Terminal / iTerm2
+    - slack
+  # Mod başlatıldığında dondurulacak (suspended) uygulamalar
+  suspend:
+    - discord
+    - steam
+    - spotify # Müzik başlamadan önce dondur/başlat kontrolü için
+
+layout:
+  workspace: 2
+  arrangement: "main-secondary" # Ana uygulama büyük, diğerleri yanda
+  primary_app: "code"
+
+browser:
+  profile: "Work"
+  restore_session: true
+  tab_groups:
+    - name: "Development Docs"
+      tabs:
+        - "https://docs.python.org/3/"
+        - "https://stackoverflow.com"
+        - "https://github.com"
+    - name: "Project Management"
+      tabs:
+        - "https://jira.atlassian.com"
+        - "https://linear.app"
+
+environment:
+  volume: 35 # Odaklanma için düşük ses
+  notifications:
+    mute:
+      - discord
+      - steam
+    allow:
+      - slack
+  music:
+    app: "spotify"
+    playlist: "spotify:playlist:37i9dQZF1DX8Ueb9C7V6rN" # "Deep Focus" URI

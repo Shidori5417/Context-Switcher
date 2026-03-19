@@ -199,7 +199,7 @@ class BrowserAgent(BaseAgent):
         backup_path = self._backup_tabs(event.mode_name)
 
         # Yeni sekmeleri aç
-        opened = 0
+        opened: int = 0
         for url in target_urls:
             if self._cdp.open_tab(url):
                 opened += 1
@@ -235,7 +235,7 @@ class BrowserAgent(BaseAgent):
 
         try:
             data = json.loads(session_files[0].read_text(encoding="utf-8"))
-            restored = 0
+            restored: int = 0
             for tab in data.get("tabs", []):
                 if self._cdp.open_tab(tab.get("url", "")):
                     restored += 1

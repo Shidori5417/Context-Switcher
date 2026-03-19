@@ -1,0 +1,50 @@
+# Ders ve Çalışma Modu — Aktif Konfigürasyon
+
+name: "Ders Modu"
+icon: "📚"
+hotkey: "ctrl+alt+s"
+
+processes:
+  start:
+    - notion
+    - "obsidian" # Not tutma alternatifleri
+    - focus-todo
+  suspend:
+    - discord
+    - steam
+    - slack
+    - telegram
+    - chrome # Eğer çalışma için ayrı bir tarayıcı/profil kullanılmıyorsa genel tarayıcıyı dondurabilir
+
+layout:
+  workspace: 1
+  arrangement: "split-left-right" # Sol: Kaynak, Sağ: Notlar
+  primary_app: "notion"
+
+browser:
+  profile: "Study"
+  restore_session: false
+  tab_groups:
+    - name: "Research"
+      tabs:
+        - "https://scholar.google.com"
+        - "https://en.wikipedia.org"
+        - "https://chatgpt.com"
+    - name: "Learning Platforms"
+      tabs:
+        - "https://coursera.org"
+        - "https://udemy.com"
+        - "https://youtube.com/c/freecodecamp"
+
+environment:
+  volume: 25 # Çok düşük fon müziği
+  notifications:
+    mute:
+      - discord
+      - telegram
+      - slack
+    allow:
+      - notion
+  music:
+    app: "spotify"
+    playlist: "spotify:playlist:37i9dQZF1DX8Ueb9C7V6rN" # "Lo-Fi Beats" veya benzeri

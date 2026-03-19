@@ -21,7 +21,7 @@ class AppState:
     suspended_pids: list[int] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return asdict(self)
+        return {k: getattr(self, k) for k in self.__dataclass_fields__}  # type: ignore
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppState":

@@ -1,0 +1,44 @@
+# Oyun ve Eğlence Modu — Aktif Konfigürasyon
+
+name: "Gaming Modu"
+icon: "🎮"
+hotkey: "ctrl+alt+g"
+
+processes:
+  start:
+    - steam
+    - discord
+    - "spotify --minimized"
+  suspend:
+    - code
+    - docker
+    - slack
+    - outlook
+
+layout:
+  workspace: 3
+  arrangement: "fullscreen"
+  primary_app: "steam"
+
+browser:
+  profile: "Personal"
+  restore_session: false
+  tab_groups:
+    - name: "Gaming News"
+      tabs:
+        - "https://twitch.tv"
+        - "https://reddit.com/r/gaming"
+        - "https://discord.com/app"
+
+environment:
+  volume: 85 # Yüksek ses performansı
+  notifications:
+    mute:
+      - slack
+      - outlook
+    allow:
+      - discord
+      - steam
+  music:
+    app: "spotify"
+    playlist: "spotify:playlist:37i9dQZF1DXdxcBWuBkbcy" # "Gaming Mix"

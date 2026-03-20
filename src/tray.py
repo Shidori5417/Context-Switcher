@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 import threading
-from typing import Callable
+from typing import Any, Callable
 
 import pystray
 from PIL import Image, ImageDraw
@@ -86,7 +86,7 @@ class TrayManager:
         )
         self._icon.run()
 
-    def stop(self, *args: any) -> None:
+    def stop(self, *args: Any) -> None:
         """İkonu kapatır."""
         logger.info("System Tray kapatılıyor.")
         if self._icon:

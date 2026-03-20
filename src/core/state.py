@@ -1,7 +1,5 @@
 """State — Aktif mod durumunu disk üzerinde kalıcı olarak yönetir."""
 
-from __future__ import annotations
-
 import json
 from dataclasses import asdict, dataclass, field
 from datetime import datetime
@@ -21,11 +19,12 @@ class AppState:
     suspended_pids: list[int] = field(default_factory=list)
 
     def to_dict(self) -> dict:
-        return {k: getattr(self, k) for k in self.__dataclass_fields__}  # type: ignore
+        return asdict(self)
 
     @classmethod
     def from_dict(cls, data: dict) -> "AppState":
-        return cls(**{k: v for k, v in data.items() if k in cls.__dataclass_fields__})
+        valid_keys = {f.name for f in cls.__dataclass_fields__.values()}  # type: ignore[attr-defined]
+        return cls(**{k: v for k, v in data.items() if k in valid_keys})
 
 
 def get_state() -> AppState:

@@ -55,7 +55,7 @@ class OrchestratorAgent(BaseAgent):
         all_reports: list[StatusReport] = []
         snapshot_path = None
 
-        if on_progress:
+        if on_progress is not None:
             on_progress("Snapshot alınıyor...", 0)
 
         # 1. Snapshot — dry-run'da atla
@@ -78,7 +78,7 @@ class OrchestratorAgent(BaseAgent):
             all_reports.extend(reports)
         else:
             for i, agent in enumerate(self._agents, 1):
-                if on_progress:
+                if on_progress is not None:
                     on_progress(f"{agent.name} çalışıyor...", (i / total_agents) * 100)
                 
                 logger.debug("Agent tetikleniyor: %s", agent.name)
@@ -110,7 +110,7 @@ class OrchestratorAgent(BaseAgent):
             # 3. Kritik hata → rollback
             if failed:
                 logger.error("Kritik agent hatası. Rollback başlatılıyor.")
-                if on_progress:
+                if on_progress is not None:
                     on_progress("Kritik hata! Geri alınıyor (Rollback)...", 100)
                 self._rollback(completed_agents, event)
                 return StatusReport(
@@ -121,7 +121,7 @@ class OrchestratorAgent(BaseAgent):
                 )
 
             # 4. State güncelle
-            if on_progress:
+            if on_progress is not None:
                 on_progress("Durum kaydediliyor...", 100)
             
             suspended_pids = self._collect_suspended_pids(all_reports)
@@ -173,7 +173,7 @@ class OrchestratorAgent(BaseAgent):
         reports = []
         total_agents = len(self._agents)
         for i, agent in enumerate(self._agents, 1):
-            if on_progress:
+            if on_progress is not None:
                 on_progress(f"[SİMÜLASYON] {agent.name} çalışıyor...", (i / total_agents) * 100)
             try:
                 report = agent.execute(event)

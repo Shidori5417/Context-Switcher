@@ -26,10 +26,18 @@ def _fix_encoding() -> None:
         except AttributeError:
             pass
 
+def complete_mode(incomplete: str):
+    """Mevcut mod adlarını terminal oto-tamamlama için döner."""
+    modes = discover_modes()
+    for name in modes.keys():
+        if name.startswith(incomplete):
+            yield name
+
+
 app = typer.Typer(
     name="context",
     help="Context-Switcher — Akilli Calisma Alani Mimari",
-    add_completion=False,
+    add_completion=True,
     rich_markup_mode="rich",
 )
 console = Console(stderr=False, highlight=True)
@@ -37,7 +45,12 @@ console = Console(stderr=False, highlight=True)
 
 @app.command()
 def switch(
-    mode: Optional[str] = typer.Argument(None, help="Geçiş yapılacak mod adı"),
+    mode: Optional[str] = typer.Argument(
+        None, 
+        help="Geçiş yapılacak mod adı",
+        shell_complete=complete_mode, # Typer/Click shell completion
+        autocompletion=complete_mode, # Geriye dönük uyumluluk
+    ),
     list_modes: bool = typer.Option(False, "--list", "-l", help="Mevcut modları listele"),
     status: bool = typer.Option(False, "--status", "-s", help="Aktif mod durumunu göster"),
     dry_run: bool = typer.Option(False, "--dry-run", "-n", help="Simülasyon — değişiklik yapma"),
@@ -301,10 +314,6 @@ def daemon() -> None:
     finally:
         hm.unregister_all()
         console.print("[yellow]Daemon durduruldu.[/yellow]")
-
-    """Yeni bir mod oluşturmak için interaktif sihirbazı başlatır."""
-    from src.wizard import run_wizard
-    run_wizard()
 
 
 if __name__ == "__main__":

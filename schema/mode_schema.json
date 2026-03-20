@@ -65,6 +65,11 @@
       "type": "object",
       "description": "Tarayıcı konfigürasyonu",
       "properties": {
+        "app": {
+          "type": "string",
+          "enum": ["chrome", "edge", "brave", "default"],
+          "description": "Kullanılacak tarayıcı uygulaması"
+        },
         "profile": {
           "type": "string",
           "description": "Tarayıcı profili"

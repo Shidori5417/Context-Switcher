@@ -140,6 +140,20 @@ class TestResumeProcesses:
 
         mock_proc.resume.assert_not_called()
 
+    def test_resume_access_denied(self):
+        import psutil
+        agent = ProcessManagerAgent()
+        mock_proc = MagicMock()
+        mock_proc.name.return_value = "discord"
+        mock_proc.resume.side_effect = psutil.AccessDenied()
+
+        with patch("psutil.Process", return_value=mock_proc):
+            report = agent.resume_processes([5000])
+
+        assert len(report.errors) == 1
+        assert report.errors[0].action == "error"
+        assert "Yetki hatası" in report.errors[0].error
+
 
 class TestStartProcesses:
     def test_start_success(self):

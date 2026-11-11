@@ -1,117 +1,110 @@
 # 🧠 Context-Switcher
 
-[![PyPI version](https://img.shields.io/pypi/v/context-switcher.svg)](https://pypi.org/project/context-switcher/)
-[![CI Status](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![CI](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml)
 
-> Akıllı Çalışma Alanı Mimarı — Tek komutla ortam geçişi
-Context-Switcher, gün içinde geçiş yaptığınız çalışma modlarını (Geliştirme, Ders, Eğlence) tek bir komutla tam anlamıyla "yaşayan" bir ortama dönüştüren bir CLI aracıdır.
+> Tek komutla çalışma ortamı geçişi: Geliştirme, Ders, Oyun modları arasında süreçleri, pencere düzenini, tarayıcıyı ve sesi birlikte değiştirir.
+
+![context switch --dry-run dev](docs/screenshots/dryrun.png)
 
 ## ✨ Özellikler
 
-- **Süreç Yönetimi** — Gereksiz uygulamaları dondur, gerekenleri başlat
-- **Pencere Düzeni** — Moda uygun pencere yerleşimi
-- **Tarayıcı Kontrolü** — Otomatik sekme grupları ve profil geçişi
-- **Ses & Bildirim** — Ses seviyesi, bildirim sessizleştirme, otomatik müzik
-- **Rollback** — Her geçiş geri alınabilir
+- **Süreç yönetimi** — Gereksiz uygulamaları dondur (suspend), gerekenleri başlat
+- **Pencere düzeni** — Moda uygun yerleşim (`main-secondary` vb.)
+- **Tarayıcı** — Profil ve sekme grupları
+- **Ses & bildirim** — Ses seviyesi, bildirim susturma, otomatik müzik
+- **Rollback** — Son geçiş `--rollback` ile geri alınır
+- **Dry-run** — `--dry-run` ile değişiklik yapmadan ne olacağını gör
+- **TUI dashboard, sistem tepsisi, global kısayollar** — `dashboard` ve `daemon` komutları
+- **İzole hata yönetimi** — Bir agent hata verse de diğerleri devam eder; loglar `~/.context-switcher/logs/` altında
 
-## 🚀 Hızlı Başlangıç
+## 🚀 Kurulum
 
-### Kurulum
+Paket PyPI'da yayınlanmış değildir; depodan kurun (Python 3.10+):
 
-**Kullanıcılar İçin (Önerilen) ✨**
-```bash
-pip install context-switcher
-```
-
-**Geliştiriciler İçin 🛠️**
 ```bash
 git clone https://github.com/Shidori5417/Context-Switcher
 cd Context-Switcher
 python -m venv .venv
-.venv\Scripts\activate        # Linux/macOS: source .venv/bin/activate
+source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-### Kullanım
+> Not: `jsonschema` modülü `pyproject.toml` bağımlılıklarında yok ama kodda kullanılıyor;
+> `ModuleNotFoundError` alırsanız `pip install jsonschema` çalıştırın.
+
+## 🕹️ Kullanım
 
 ```bash
 context switch dev             # Geliştirme moduna geç
-context switch study           # Ders moduna geç
 context switch --list          # Modları listele
-context switch --status        # Aktif mod durumu (Kurtarılan RAM vb.)
+context switch --status        # Aktif mod ve kurtarılan RAM
 context switch --dry-run dev   # Simülasyon (değişiklik yapmaz)
 context switch --rollback      # Son geçişi geri al
-context dashboard              # Canlı TUI izleme panelini aç
-context daemon                 # Arka plan servisini başlat (Tray & Hotkey)
-context init                   # Yeni mod oluşturma sihirbazı
+context init                   # Yeni mod sihirbazı
+context dashboard              # Canlı TUI paneli
+context daemon                 # Tepsi ikonu + global kısayollar
 ```
 
-## 🛠️ Yeni Nesil Özellikler (Faz 3)
+Windows'ta UTF-8 için `context.bat` kullanılabilir.
 
-- **TUI Dashboard** — İşlemci, bellek ve aktif mod verilerini canlı izleyin (`context dashboard`).
-- **System Tray (Tepsi İkonu)** — Windows görev çubuğundan sağ tıkla hızlı mod değişimi.
-- **Global Hotkeys** — Mod dosyalarında tanımlı kısayollarla (`Ctrl+Alt+S` vb.) anında geçiş.
-- **Robust Logging** — Tüm süreçler `~/.context-switcher/logs/` altında kayıtlı.
-- **Isolated Failure Management** — Bir agent hata alsa bile (örn. tarayıcı sekmesi açılmasa da) diğer işlemler devam eder.
+| `--help` | `--list` |
+|---|---|
+| ![help](docs/screenshots/help.png) | ![list](docs/screenshots/list.png) |
 
 ## 📁 Konfigürasyon
 
-Mod dosyalarını `~/.context-switcher/modes/` dizinine YAML olarak ekleyin:
+Modlar YAML dosyasıdır. Önce depodaki [`modes/`](modes/) (`dev`, `study`, `gaming`), sonra `~/.context-switcher/modes/` okunur; aynı adlı kullanıcı modu öncelik alır. Şema: [`schema/mode_schema.json`](schema/mode_schema.json).
 
 ```yaml
 name: "Geliştirme Modu"
 icon: "💻"
+hotkey: "ctrl+alt+d"            # global kısayol (daemon)
 
 processes:
-  start: [vscode, docker]
+  start: [code, docker]
   suspend: [discord, steam]
 
 layout:
   arrangement: main-secondary
-  primary_app: vscode
+  primary_app: code
 
 browser:
   profile: Work
   tab_groups:
     - name: Docs
-      tabs: ["https://docs.python.org"]
+      tabs: ["https://docs.python.org/3/"]
 
 environment:
-  volume: 40
+  volume: 35
   music:
     app: spotify
-    playlist: "Deep Focus"
+    playlist: "spotify:playlist:..."
 ```
-
-Örnek dosyalar: [`modes/`](modes/) dizininde.
 
 ## 🏗️ Mimari
 
-5 bağımsız agent, olay tabanlı (event-driven) iletişim ile çalışır:
+Olay tabanlı (event bus) iletişimle çalışan beş agent; kod `src/agents/` altında. Ayrıntı: [`agents.md`](agents.md).
 
 | Agent | Görev |
 |-------|-------|
-| **Orchestrator** | Geçiş koordinasyonu |
-| **Process Manager** | Süreç dondurma/başlatma |
-| **Layout Agent** | Pencere düzeni |
-| **Browser Agent** | Tarayıcı sekmeleri |
-| **Environment Agent** | Ses, bildirim, müzik |
+| Orchestrator | Geçiş koordinasyonu, snapshot |
+| Process Manager | Süreç dondurma/başlatma |
+| Layout Agent | Pencere düzeni |
+| Browser Agent | Tarayıcı sekmeleri |
+| Environment Agent | Ses, bildirim, müzik |
 
-Detaylı mimari: [`agents.md`](agents.md)
+Teknoloji: Python, Typer + Rich (CLI/TUI), psutil, PyYAML + jsonschema, pystray, keyboard.
 
 ## 🧪 Geliştirme
 
 ```bash
-pytest tests/ -v          # Testleri çalıştır
-ruff check src/           # Linter
-ruff format src/           # Formatter
+pytest tests/ -v
+ruff check src/ tests/
+ruff format src/ tests/
 ```
 
-## 📋 İlerleme Durumu
-
-Detaylı yol haritası: [`progress.md`](progress.md)
+Yol haritası: [`progress.md`](progress.md)
 
 ## 📄 Lisans
 
-MIT
+MIT (`pyproject.toml`'da belirtilmiştir; depoda ayrı bir `LICENSE` dosyası yok).

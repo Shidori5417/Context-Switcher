@@ -29,9 +29,6 @@ source .venv/bin/activate     # Windows: .venv\Scripts\activate
 pip install -e ".[dev]"
 ```
 
-> Not: `jsonschema` modülü `pyproject.toml` bağımlılıklarında yok ama kodda kullanılıyor;
-> `ModuleNotFoundError` alırsanız `pip install jsonschema` çalıştırın.
-
 ## 🕹️ Kullanım
 
 ```bash
@@ -107,4 +104,4 @@ Yol haritası: [`progress.md`](progress.md)
 
 ## 📄 Lisans
 
-MIT (`pyproject.toml`'da belirtilmiştir; depoda ayrı bir `LICENSE` dosyası yok).
+[MIT](LICENSE)

@@ -11,7 +11,8 @@ processes:
     - "spotify --minimized"
   suspend:
     - code
-    - docker
+    - docker # Linux daemon / CLI
+    - "Docker Desktop" # Windows/macOS (eşleşme artık tam ad ile)
     - slack
     - outlook
 

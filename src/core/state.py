@@ -15,8 +15,9 @@ class AppState:
     current_mode: str | None = None
     previous_mode: str | None = None
     last_snapshot: str | None = None  # snapshot dosyasının yolu
-    switched_at: str | None = None    # ISO format timestamp
-    suspended_pids: list[int] = field(default_factory=list)
+    switched_at: str | None = None  # ISO format timestamp
+    # Eski state dosyalarında düz int, yeni olanlarda {pid, create_time} kayıtları
+    suspended_pids: list[int | dict] = field(default_factory=list)
 
     def to_dict(self) -> dict:
         return asdict(self)
@@ -51,7 +52,7 @@ def update_state(
     current_mode: str,
     previous_mode: str | None = None,
     last_snapshot: str | None = None,
-    suspended_pids: list[int] | None = None,
+    suspended_pids: list[int | dict] | None = None,
 ) -> AppState:
     """Mevcut state'i günceller ve diske yazar."""
     state = AppState(

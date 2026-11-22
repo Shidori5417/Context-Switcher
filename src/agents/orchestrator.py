@@ -2,11 +2,10 @@
 
 from __future__ import annotations
 
-import logging
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 from rich.console import Console
-from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from src.agents.base_agent import BaseAgent
 from src.agents.browser_agent import BrowserAgent
@@ -15,7 +14,8 @@ from src.agents.layout_agent import LayoutAgent
 from src.agents.process_manager import ProcessManagerAgent
 from src.core.event_bus import AgentName, StatusReport, SwitchEvent
 from src.core.logger import logger
-from src.core.snapshot import take_snapshot
+from src.core.procs import ProcEntry, merge_entries, normalize_entries
+from src.core.snapshot import take_snapshot, update_snapshot_suspended
 from src.core.state import get_state, update_state
 
 console = Console()
@@ -47,10 +47,12 @@ class OrchestratorAgent(BaseAgent):
     def name(self) -> str:
         return AgentName.ORCHESTRATOR
 
-    def execute(self, event: SwitchEvent, on_progress: Callable[[str, float], None] | None = None) -> StatusReport:
+    def execute(
+        self, event: SwitchEvent, on_progress: Callable[[str, float], None] | None = None
+    ) -> StatusReport:
         """Tüm agent pipeline'ını çalıştırır."""
         logger.info("Mod geçişi başlatıldı: %s (Dry-run: %s)", event.mode_name, event.dry_run)
-        
+
         state = get_state()
         all_reports: list[StatusReport] = []
         snapshot_path = None
@@ -61,12 +63,15 @@ class OrchestratorAgent(BaseAgent):
         # 1. Snapshot — dry-run'da atla
         if not event.dry_run:
             try:
-                snapshot_path = take_snapshot(
-                    mode_name=event.previous_mode or "unknown"
-                )
+                snapshot_path = take_snapshot(mode_name=event.previous_mode or "unknown")
                 logger.debug("Snapshot alındı: %s", snapshot_path)
             except Exception as e:
                 logger.warning("Snapshot alınamadı: %s", e)
+
+        # 1b. Önceki modun dondurduğu süreçleri uyandır (hedef mod gerekirse yeniden dondurur)
+        retained: list[ProcEntry] = []
+        if not event.dry_run:
+            retained = self._resume_previous(state)
 
         # 2. Agent pipeline
         completed_agents: list[tuple[BaseAgent, StatusReport]] = []
@@ -80,7 +85,7 @@ class OrchestratorAgent(BaseAgent):
             for i, agent in enumerate(self._agents, 1):
                 if on_progress is not None:
                     on_progress(f"{agent.name} çalışıyor...", (i / total_agents) * 100)
-                
+
                 logger.debug("Agent tetikleniyor: %s", agent.name)
                 try:
                     report = agent.execute(event)
@@ -93,16 +98,21 @@ class OrchestratorAgent(BaseAgent):
                             failed = True
                             break
                         else:
-                            logger.info("Kritik olmayan agent başarısız oldu, devam ediliyor: %s", agent.name)
+                            logger.info(
+                                "Kritik olmayan agent başarısız oldu, devam ediliyor: %s",
+                                agent.name,
+                            )
                             # Kritik değilse partial hata, ama devam et
 
                 except Exception as e:
                     logger.exception("Agent çöktü: %s", agent.name)
-                    all_reports.append(StatusReport(
-                        agent_name=agent.name,
-                        success=False,
-                        message=f"Beklenmeyen hata: {e}",
-                    ))
+                    all_reports.append(
+                        StatusReport(
+                            agent_name=agent.name,
+                            success=False,
+                            message=f"Beklenmeyen hata: {e}",
+                        )
+                    )
                     if agent.name in self._critical_agents:
                         failed = True
                         break
@@ -116,20 +126,26 @@ class OrchestratorAgent(BaseAgent):
                 return StatusReport(
                     agent_name=self.name,
                     success=False,
-                    message=f"Geçiş başarısız — rollback yapıldı.",
+                    message="Geçiş başarısız — rollback yapıldı.",
                     details={"reports": [r.message for r in all_reports]},
                 )
 
             # 4. State güncelle
             if on_progress is not None:
                 on_progress("Durum kaydediliyor...", 100)
-            
-            suspended_pids = self._collect_suspended_pids(all_reports)
+
+            # Uyandırılamayanlar (yetki hatası) izlenmeye devam eder
+            suspended = merge_entries(self._collect_suspended_procs(all_reports), retained)
+            if snapshot_path:
+                try:
+                    update_snapshot_suspended(snapshot_path, suspended)
+                except Exception as e:
+                    logger.warning("Snapshot güncellenemedi: %s", e)
             update_state(
                 current_mode=event.mode_name,
                 previous_mode=event.previous_mode,
                 last_snapshot=str(snapshot_path) if snapshot_path else None,
-                suspended_pids=suspended_pids,
+                suspended_pids=suspended,
             )
             logger.info("Geçiş başarıyla tamamlandı.")
 
@@ -144,21 +160,21 @@ class OrchestratorAgent(BaseAgent):
             },
         )
 
-
     def rollback(self, event: SwitchEvent) -> StatusReport:
         """Tüm agent'ların rollback metodunu çağırır."""
-        state = get_state()
         reports = []
         for agent in self._agents:
             try:
                 report = agent.rollback(event)
                 reports.append(report)
             except Exception as e:
-                reports.append(StatusReport(
-                    agent_name=agent.name,
-                    success=False,
-                    message=f"Rollback hatası: {e}",
-                ))
+                reports.append(
+                    StatusReport(
+                        agent_name=agent.name,
+                        success=False,
+                        message=f"Rollback hatası: {e}",
+                    )
+                )
         return StatusReport(
             agent_name=self.name,
             success=all(r.success for r in reports),
@@ -168,7 +184,9 @@ class OrchestratorAgent(BaseAgent):
 
     # ── Helpers ───────────────────────────────────────────────────────────────
 
-    def _run_dry_run(self, event: SwitchEvent, on_progress: Callable[[str, float], None] | None = None) -> list[StatusReport]:
+    def _run_dry_run(
+        self, event: SwitchEvent, on_progress: Callable[[str, float], None] | None = None
+    ) -> list[StatusReport]:
         """Dry-run: agent'ları dry_run=True ile çalıştırır."""
         reports = []
         total_agents = len(self._agents)
@@ -179,11 +197,13 @@ class OrchestratorAgent(BaseAgent):
                 report = agent.execute(event)
                 reports.append(report)
             except Exception as e:
-                reports.append(StatusReport(
-                    agent_name=agent.name,
-                    success=False,
-                    message=f"Simülasyon hatası: {e}",
-                ))
+                reports.append(
+                    StatusReport(
+                        agent_name=agent.name,
+                        success=False,
+                        message=f"Simülasyon hatası: {e}",
+                    )
+                )
         return reports
 
     def _rollback(
@@ -198,9 +218,35 @@ class OrchestratorAgent(BaseAgent):
             except Exception as e:
                 logger.error("Rollback hatası (%s): %s", agent.name, e)
 
-    def _collect_suspended_pids(self, reports: list[StatusReport]) -> list[int]:
-        """Tüm raporlardan suspend edilen PID'leri toplar."""
-        pids: list[int] = []
+    def _resume_previous(self, state: Any) -> list[ProcEntry]:
+        """Önceki geçişte dondurulmuş süreçleri uyandırır.
+
+        Yeni mod aynı süreci de dondurmak istiyorsa ProcessManager onu tekrar
+        dondurur. Döner: uyandırılamayan (yetki hatası) ve izlenmesi gereken kayıtlar.
+        """
+        previous = state.suspended_pids if isinstance(state.suspended_pids, list) else []
+        entries = normalize_entries(previous)
+        if not entries:
+            return []
+
+        pm = next((a for a in self._agents if isinstance(a, ProcessManagerAgent)), None)
+        if pm is None:
+            return entries
+        try:
+            report = pm.resume_processes(entries)
+        except Exception as e:
+            logger.warning("Önceki modun süreçleri uyandırılamadı: %s", e)
+            return entries
+
+        logger.info("Önceki modun %d süreci uyandırıldı.", len(report.resumed))
+        failed = {a.pid for a in report.errors if a.action == "error"}
+        return [e for e in entries if e["pid"] in failed]
+
+    def _collect_suspended_procs(self, reports: list[StatusReport]) -> list[ProcEntry]:
+        """Tüm raporlardan suspend edilen süreçleri ({pid, create_time}) toplar."""
+        groups: list[list[Any]] = []
         for report in reports:
-            pids.extend(report.details.get("suspended_pids", []))
-        return pids
+            procs = report.details.get("suspended_procs")
+            # suspended_procs yoksa eski formatlı (düz PID) rapora düş
+            groups.append(procs if procs else report.details.get("suspended_pids", []))
+        return merge_entries(*groups)

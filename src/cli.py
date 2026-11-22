@@ -2,10 +2,8 @@
 
 from __future__ import annotations
 
-import io
 import sys
 from pathlib import Path
-from typing import Optional
 
 import typer
 from rich.console import Console
@@ -13,8 +11,9 @@ from rich.panel import Panel
 from rich.table import Table
 
 from src.core.config_loader import discover_modes, load_mode
-from src.core.snapshot import restore_snapshot
-from src.core.state import clear_state, get_state, update_state
+from src.core.procs import merge_entries, normalize_entries
+from src.core.snapshot import load_snapshot
+from src.core.state import clear_state, get_state
 
 
 def _fix_encoding() -> None:
@@ -25,6 +24,7 @@ def _fix_encoding() -> None:
             sys.stderr.reconfigure(encoding="utf-8", errors="replace")  # type: ignore[union-attr]
         except AttributeError:
             pass
+
 
 def complete_mode(incomplete: str):
     """Mevcut mod adlarını terminal oto-tamamlama için döner."""
@@ -45,11 +45,11 @@ console = Console(stderr=False, highlight=True)
 
 @app.command()
 def switch(
-    mode: Optional[str] = typer.Argument(
-        None, 
+    mode: str | None = typer.Argument(
+        None,
         help="Geçiş yapılacak mod adı",
-        shell_complete=complete_mode, # Typer/Click shell completion
-        autocompletion=complete_mode, # Geriye dönük uyumluluk
+        shell_complete=complete_mode,  # Typer/Click shell completion
+        autocompletion=complete_mode,  # Geriye dönük uyumluluk
     ),
     list_modes: bool = typer.Option(False, "--list", "-l", help="Mevcut modları listele"),
     status: bool = typer.Option(False, "--status", "-s", help="Aktif mod durumunu göster"),
@@ -82,13 +82,13 @@ def switch(
 
 # ── Handlers ──────────────────────────────────────────────────────────────────
 
+
 def _handle_list() -> None:
     """Mevcut modları tablo olarak listeler."""
     modes = discover_modes()
     if not modes:
         console.print(
-            "[dim]Henüz tanımlı mod yok.[/dim] "
-            "[cyan]modes/[/cyan] dizinine YAML dosyaları ekleyin."
+            "[dim]Henüz tanımlı mod yok.[/dim] [cyan]modes/[/cyan] dizinine YAML dosyaları ekleyin."
         )
         return
 
@@ -105,6 +105,7 @@ def _handle_list() -> None:
 def _handle_status() -> None:
     """Aktif mod durumunu gösterir."""
     import psutil
+
     state = get_state()
 
     if state.current_mode is None:
@@ -119,11 +120,11 @@ def _handle_status() -> None:
         return
 
     suspended_count = len(state.suspended_pids)
-    
+
     saved_ram_mb = 0.0
-    for pid in state.suspended_pids:
+    for entry in normalize_entries(state.suspended_pids):
         try:
-            p = psutil.Process(pid)
+            p = psutil.Process(entry["pid"])
             saved_ram_mb += p.memory_info().rss / (1024 * 1024)
         except (psutil.NoSuchProcess, psutil.AccessDenied):
             pass
@@ -155,21 +156,27 @@ def _handle_rollback() -> None:
 
     console.print(f"[cyan]🔄 Rollback:[/cyan] '{state.current_mode}' modundan çıkılıyor...")
 
-    # Snapshot'tan suspend edilenleri resume et
-    resumed_count = 0
+    # Snapshot'taki ve state'teki PID'lerin birleşimini resume et
+    # (biri eksik/bozuksa diğeri yine de çalışsın)
+    from src.agents.process_manager import ProcessManagerAgent
+
+    entries = merge_entries(state.suspended_pids)
     if state.last_snapshot:
-        snap_path = Path(state.last_snapshot)
         try:
-            resumed = restore_snapshot(snap_path)
-            resumed_count = len(resumed)
+            entries = merge_entries(
+                load_snapshot(Path(state.last_snapshot)).get("suspended_pids", []), entries
+            )
         except FileNotFoundError:
-            console.print("[yellow]⚠  Snapshot dosyası bulunamadı — süreçler resume edilemedi.[/yellow]")
-    else:
-        # Snapshot yoksa state'deki PID'leri dene
-        from src.agents.process_manager import ProcessManagerAgent
-        pm = ProcessManagerAgent()
-        report = pm.resume_processes(state.suspended_pids)
-        resumed_count = len(report.resumed)
+            console.print(
+                "[yellow]⚠  Snapshot dosyası bulunamadı — state'teki PID'ler kullanılıyor.[/yellow]"
+            )
+        except (ValueError, OSError):
+            console.print(
+                "[yellow]⚠  Snapshot okunamadı — state'teki PID'ler kullanılıyor.[/yellow]"
+            )
+
+    report = ProcessManagerAgent().resume_processes(entries)
+    resumed_count = len(report.resumed)
 
     clear_state()
     console.print(
@@ -184,8 +191,8 @@ def _handle_rollback() -> None:
 
 def _handle_switch(mode_name: str, dry_run: bool) -> None:
     """Mod geçişini Orchestrator üzerinden çalıştırır."""
-    from rich.progress import Progress, SpinnerColumn, TextColumn, BarColumn, TaskProgressColumn
-    
+    from rich.progress import BarColumn, Progress, SpinnerColumn, TaskProgressColumn, TextColumn
+
     # Mod dosyasını bul
     modes = discover_modes()
     if mode_name not in modes:
@@ -246,7 +253,9 @@ def _handle_switch(mode_name: str, dry_run: bool) -> None:
 
         console.print(
             Panel(
-                "\n".join(lines) + snap_note if lines else f"[green]✓ Geçiş tamamlandı[/green]{snap_note}",
+                "\n".join(lines) + snap_note
+                if lines
+                else f"[green]✓ Geçiş tamamlandı[/green]{snap_note}",
                 title=f"{'🧪 Simülasyon' if dry_run else '✅ Geçiş'} Tamamlandı",
                 border_style="yellow" if dry_run else "green",
             )
@@ -262,7 +271,6 @@ def _handle_switch(mode_name: str, dry_run: bool) -> None:
         raise typer.Exit(1)
 
 
-
 def app_entry() -> None:
     """pyproject.toml entry point."""
     _fix_encoding()
@@ -273,6 +281,7 @@ def app_entry() -> None:
 def init() -> None:
     """Yeni bir modu interaktif olarak sihirbaz ile oluşturur."""
     from src.wizard import run_wizard
+
     run_wizard()
 
 
@@ -280,6 +289,7 @@ def init() -> None:
 def dashboard() -> None:
     """Canlı gösterge panelini (TUI Dashboard) başlatır."""
     from src.tui import run_dashboard
+
     run_dashboard()
 
 
@@ -288,8 +298,10 @@ def daemon() -> None:
     """Arka planda (System Tray & Hotkey) dinleme servisini başlatır."""
     from src.hotkeys import HotkeyManager
     from src.tray import TrayManager
-    
-    console.print("[cyan]Daemon başlatılıyor... (Tepsi ikonundan veya Ctrl+C ile kapatabilirsiniz)[/cyan]")
+
+    console.print(
+        "[cyan]Daemon başlatılıyor... (Tepsi ikonundan veya Ctrl+C ile kapatabilirsiniz)[/cyan]"
+    )
 
     def safe_switch(mode_name: str) -> None:
         try:
@@ -299,8 +311,9 @@ def daemon() -> None:
             pass
         except Exception as e:
             from src.core.logger import logger
+
             logger.error("Daemon exception on switch: %s", e)
-            
+
     hm = HotkeyManager(on_switch=safe_switch)
     # Hata olmaması için kısayolları kaydet
     hm.register_all()

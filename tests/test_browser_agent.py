@@ -5,8 +5,6 @@ from __future__ import annotations
 import json
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.agents.browser_agent import BrowserAgent, CDPClient, detect_browser
 from src.core.event_bus import SwitchEvent
 
@@ -77,14 +75,19 @@ class TestBrowserAgentExecute:
         agent = BrowserAgent()
         event = _make_event()
 
+        # Gerçek tarayıcı sekmesi açılmasın diye webbrowser.open mock'lanır
         with (
             patch.object(agent._cdp, "is_available", return_value=False),
             patch("src.agents.browser_agent.detect_browser", return_value=None),
+            patch("webbrowser.open", return_value=True) as mock_open,
         ):
             report = agent.execute(event)
 
         assert report.success  # Geçişi durdurmamalı
-        assert "CDP" in report.message
+        # CDP yoksa kod sistem varsayılan tarayıcısına düşer (mesaj artık "CDP" içermez)
+        assert "varsayılan tarayıcı" in report.message
+        mock_open.assert_called_once_with("https://example.com")
+        assert report.details["opened"] == 1
 
     def test_cdp_available_opens_tabs(self):
         agent = BrowserAgent()
@@ -126,8 +129,7 @@ class TestDetectBrowser:
         with patch("src.agents.browser_agent._BROWSER_PATHS_WINDOWS", windows_paths):
             with patch("sys.platform", "win32"):
                 result = detect_browser()
-        # Platform bağımlı — sadece None olmadığını kontrol et ya da mock'la
-        # (gerçek browser yolu olmadığından bu test yalnızca logic'i test eder)
+        assert result == ("chrome", str(fake_browser))
 
     def test_returns_none_when_no_browser(self):
         with (
@@ -135,4 +137,5 @@ class TestDetectBrowser:
             patch("src.agents.browser_agent._BROWSER_PATHS_LINUX", []),
         ):
             result = detect_browser()
+        assert result is None
         assert result is None

@@ -4,8 +4,6 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
-import pytest
-
 from src.agents.orchestrator import OrchestratorAgent
 from src.core.event_bus import StatusReport, SwitchEvent
 
@@ -20,8 +18,9 @@ def _make_event(dry_run: bool = False) -> SwitchEvent:
 
 
 def _ok_report(agent_name: str) -> StatusReport:
-    return StatusReport(agent_name=agent_name, success=True, message="OK",
-                        details={"suspended_pids": []})
+    return StatusReport(
+        agent_name=agent_name, success=True, message="OK", details={"suspended_pids": []}
+    )
 
 
 def _fail_report(agent_name: str) -> StatusReport:
@@ -72,14 +71,9 @@ class TestOrchestratorPipeline:
         event = _make_event()
 
         agents = orch._agents
-        # İlk agent (örneğin PM değil de başka biri farz et) başarılı
-        # Ama gerçekte ProcessManager 0. indektedir. 
-        # Biz LayoutAgent (1) başarılı yapıp BrowserAgent (2) üzerinden test yapamayız çünkü PM kritik.
-        # Testi değiştirelim: Kritik ajan ProcessManager hata versin
+        # ProcessManager (0. indeks) kritik agent'tır; hata verirse geçiş iptal olmalı.
         agents[0].execute = MagicMock(return_value=_fail_report(agents[0].name))
-        
-        # Test için rollback listesine suni bir şekilde birini eklemiş gibi yapamayız,
-        # O yüzden kod ilk ajanda patlayıp boş bir listeyi rollback'e yollar, ama assertion result == False olmalı
+
         with (
             patch("src.agents.orchestrator.take_snapshot", return_value=None),
             patch("src.agents.orchestrator.get_state") as mock_state,

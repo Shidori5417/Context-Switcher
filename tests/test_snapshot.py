@@ -3,13 +3,11 @@
 from __future__ import annotations
 
 import json
-from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
 
 from src.core.snapshot import (
-    latest_snapshot,
     list_snapshots,
     load_snapshot,
     restore_snapshot,
@@ -50,6 +48,7 @@ class TestTakeSnapshot:
             path = take_snapshot("test")
 
         assert new_dir.exists()
+        assert path.parent == new_dir
 
 
 class TestLoadSnapshot:
@@ -82,6 +81,7 @@ class TestRestoreSnapshot:
 
     def test_skips_dead_process(self, tmp_path):
         import psutil as _psutil
+
         snap = tmp_path / "snap.json"
         data = {"mode_name": "dev", "suspended_pids": [9999], "processes": []}
         snap.write_text(json.dumps(data))

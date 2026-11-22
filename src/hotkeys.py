@@ -3,11 +3,13 @@
 from __future__ import annotations
 
 import threading
+from collections.abc import Callable
+
 import keyboard
-from typing import Callable
 
 from src.core.config_loader import discover_modes, load_mode
 from src.core.logger import logger
+
 
 class HotkeyManager:
     """Modlarda tanımlı hotkey parametrelerine göre global klavye kısayollarını dinler."""
@@ -20,7 +22,7 @@ class HotkeyManager:
         """YAML dosyalarını okuyarak 'hotkey' geçen modları dinlemeye başlar."""
         logger.info("Kısayol yöneticisi (Hotkeys) başlatılıyor.")
         modes = discover_modes()
-        
+
         # Öncekileri temizle (reload desteği için)
         keyboard.unhook_all()
         self._registered_keys.clear()
@@ -31,6 +33,7 @@ class HotkeyManager:
                 hotkey = config.get("hotkey")
                 if hotkey:
                     logger.debug("Kısayol eklendi: %s -> %s", hotkey, mode_name)
+
                     # Keyboard callback için local variable capture fix
                     def make_callback(m: str) -> Callable:
                         def action() -> None:
@@ -38,8 +41,9 @@ class HotkeyManager:
                             # Keyboard callback thread'indedir, asenkron geçiş güvenli olmayabilir
                             # O yüzden background thread'de on_switch çağırılabilir.
                             threading.Thread(target=self.on_switch, args=(m,), daemon=True).start()
+
                         return action
-                    
+
                     keyboard.add_hotkey(hotkey, make_callback(mode_name))
                     self._registered_keys.add(hotkey)
             except Exception as e:

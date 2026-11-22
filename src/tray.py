@@ -2,17 +2,17 @@
 
 from __future__ import annotations
 
-import sys
-import threading
-from typing import Any, Callable
+from collections.abc import Callable
+from typing import Any
 
 import pystray
 from PIL import Image, ImageDraw
-from pystray import MenuItem as item
+from pystray import MenuItem
 
 from src.core.config_loader import discover_modes, load_mode
 from src.core.logger import logger
 from src.core.state import get_state
+
 
 def _create_icon_image(color: str = "#4CAF50") -> Image.Image:
     """Tepsi için basit bir (C) ikonu oluşturur."""
@@ -40,7 +40,7 @@ class TrayManager:
         current = state.current_mode
 
         menu_items = []
-        
+
         # Modlar eklensin
         for mode_name, path in modes.items():
             try:
@@ -53,21 +53,26 @@ class TrayManager:
 
                 # Python scope yakalama sorunu için default arg (m=mode_name)
                 def make_callback(m: str) -> Callable:
-                    def action(icon: pystray.Icon, item: pystray.MenuItem) -> None:
+                    def action(icon: pystray.Icon, menu_item: pystray.MenuItem) -> None:
                         logger.info("Tray menüsünden mod geçişi: %s", m)
                         self.on_switch(m)
                         # Menüyü ve tooltip'i yenile
                         if self._icon:
                             self._icon.title = f"Context: {m}"
                             self._icon.menu = pystray.Menu(*self._build_menu())
+
                     return action
 
-                menu_items.append(item(label, make_callback(mode_name), checked=lambda i, m=mode_name: m == current))
+                menu_items.append(
+                    MenuItem(
+                        label, make_callback(mode_name), checked=lambda i, m=mode_name: m == current
+                    )
+                )
             except Exception as e:
                 logger.error("Menü oluşturulurken mod okuma hatası: %s", e)
 
         menu_items.append(pystray.Menu.SEPARATOR)
-        menu_items.append(item("Çıkış", self.stop))
+        menu_items.append(MenuItem("Çıkış", self.stop))
 
         return tuple(menu_items)
 
@@ -76,14 +81,9 @@ class TrayManager:
         logger.info("System Tray başlatılıyor.")
         state = get_state()
         title = f"Context: {state.current_mode or 'Yok'}"
-        
+
         menu = pystray.Menu(*self._build_menu())
-        self._icon = pystray.Icon(
-            "context_switcher",
-            _create_icon_image(),
-            title=title,
-            menu=menu
-        )
+        self._icon = pystray.Icon("context_switcher", _create_icon_image(), title=title, menu=menu)
         self._icon.run()
 
     def stop(self, *args: Any) -> None:

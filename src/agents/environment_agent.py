@@ -19,6 +19,7 @@ IS_MACOS = sys.platform == "darwin"
 
 # ── Ses Seviyesi ────────────────────────────────────────────────────────────
 
+
 def _set_volume_windows(level: int) -> bool:
     """Windows'ta ses seviyesini ayarlar.
 
@@ -26,9 +27,11 @@ def _set_volume_windows(level: int) -> bool:
     """
     # Yöntem 1: pycaw (pip install pycaw)
     try:
-        from ctypes import cast, POINTER
+        from ctypes import POINTER, cast
+
         from comtypes import CLSCTX_ALL
         from pycaw.pycaw import AudioUtilities, IAudioEndpointVolume
+
         devices = AudioUtilities.GetSpeakers()
         interface = devices.Activate(IAudioEndpointVolume._iid_, CLSCTX_ALL, None)
         volume = cast(interface, POINTER(IAudioEndpointVolume))
@@ -43,26 +46,18 @@ def _set_volume_windows(level: int) -> bool:
         nircmd_level = int(65535 * level / 100)
         subprocess.run(
             ["nircmd.exe", "setvolume", "0", str(nircmd_level), str(nircmd_level)],
-            capture_output=True, check=True, timeout=5,
+            capture_output=True,
+            check=True,
+            timeout=5,
         )
         return True
     except Exception:
         pass
 
-    # Yöntem 3: PowerShell
+    # Yöntem 3: WINMM waveOutSetVolume
     try:
-        script = f"[Audio]::Volume = {level / 100}; Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait('%{{F4}}')"
-        ps_script = (
-            "$obj = New-Object -ComObject WScript.Shell; "
-            f"$wshShell = New-Object -ComObject WScript.shell; "
-            f"(New-Object -ComObject 'WMPlayer.OCX.7').settings.volume = {level}"
-        )
-        # Basit PowerShell: SoundVolumeView veya system tray simulation — çok sınırlı
-        # En güvenilir fallback: ses ikonuna tıklama yerine PowerShell audio API
         import ctypes
-        HWND_BROADCAST = 0xFFFF
-        WM_APPCOMMAND = 0x0319
-        APPCOMMAND_VOLUME_MUTE = 0x80000
+
         # Volume set doğrudan WINMM ile yapalım
         winmm = ctypes.windll.winmm
         # waveOutSetVolume: 0x0000 sessiz, 0xFFFF maksimum, her kanal 16 bit
@@ -79,14 +74,18 @@ def _set_volume_linux(level: int) -> bool:
     try:
         subprocess.run(
             ["pactl", "set-sink-volume", "@DEFAULT_SINK@", f"{level}%"],
-            check=True, capture_output=True, timeout=5,
+            check=True,
+            capture_output=True,
+            timeout=5,
         )
         return True
     except Exception:
         try:
             subprocess.run(
                 ["amixer", "sset", "Master", f"{level}%"],
-                check=True, capture_output=True, timeout=5,
+                check=True,
+                capture_output=True,
+                timeout=5,
             )
             return True
         except Exception as e:
@@ -98,7 +97,9 @@ def _set_volume_macos(level: int) -> bool:
     try:
         subprocess.run(
             ["osascript", "-e", f"set volume output volume {level}"],
-            check=True, capture_output=True, timeout=5,
+            check=True,
+            capture_output=True,
+            timeout=5,
         )
         return True
     except Exception as e:
@@ -120,10 +121,12 @@ def set_volume(level: int) -> bool:
 
 # ── Bildirim ──────────────────────────────────────────────────────────────
 
+
 def send_notification(title: str, message: str) -> bool:
     """Sistem toast bildirimi gönderir."""
     try:
         from plyer import notification
+
         notification.notify(
             title=title,
             message=message,
@@ -137,6 +140,7 @@ def send_notification(title: str, message: str) -> bool:
 
 
 # ── Spotify ────────────────────────────────────────────────────────────────
+
 
 def _spotify_open_playlist(playlist: str, app: str = "spotify") -> bool:
     """Spotify'da çalma listesi başlatır.
@@ -156,12 +160,14 @@ def _spotify_open_playlist(playlist: str, app: str = "spotify") -> bool:
             if uri:
                 subprocess.Popen(
                     ["cmd", "/c", "start", "", uri],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             else:
                 subprocess.Popen(
                     ["spotify"],
-                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
                 )
             return True
         except Exception as e:
@@ -191,6 +197,7 @@ def _spotify_open_playlist(playlist: str, app: str = "spotify") -> bool:
 
 # ── Main Agent ─────────────────────────────────────────────────────────────
 
+
 class EnvironmentAgent(BaseAgent):
     """Çevre yöneticisi agent.
 
@@ -205,7 +212,8 @@ class EnvironmentAgent(BaseAgent):
         env_cfg: dict[str, Any] = event.config.get("environment", {})
         if not env_cfg:
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message="Environment: Config'de environment bölümü yok, atlandı.",
             )
 
@@ -253,6 +261,7 @@ class EnvironmentAgent(BaseAgent):
         prev = event.previous_mode or "önceki mod"
         send_notification("Context-Switcher", f"'{prev}' moduna geri dönüldü.")
         return StatusReport(
-            agent_name=self.name, success=True,
+            agent_name=self.name,
+            success=True,
             message="Environment rollback: Bildirim gönderildi.",
         )

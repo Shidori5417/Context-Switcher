@@ -27,7 +27,8 @@ IS_MACOS = sys.platform == "darwin"
 @dataclass
 class WindowInfo:
     """Bir pencerenin temel bilgileri."""
-    handle: Any       # Windows: HWND (int), Linux: window ID (str)
+
+    handle: Any  # Windows: HWND (int), Linux: window ID (str)
     title: str
     x: int
     y: int
@@ -37,6 +38,7 @@ class WindowInfo:
 
 # ── Windows Backend ─────────────────────────────────────────────────────────
 
+
 class _WindowsBackend:
     """pywin32 tabanlı Windows pencere yöneticisi."""
 
@@ -44,6 +46,7 @@ class _WindowsBackend:
         try:
             import win32con
             import win32gui
+
             self._win32gui = win32gui
             self._win32con = win32con
             self.available = True
@@ -55,6 +58,7 @@ class _WindowsBackend:
         if not self.available:
             return 1920, 1080
         import win32api
+
         monitor = win32api.GetMonitorInfo(win32api.MonitorFromPoint((0, 0)))
         work_area = monitor["Work"]
         return work_area[2] - work_area[0], work_area[3] - work_area[1]
@@ -76,10 +80,16 @@ class _WindowsBackend:
                 try:
                     rect = self._win32gui.GetWindowRect(hwnd)
                     x, y, x2, y2 = rect
-                    results.append(WindowInfo(
-                        handle=hwnd, title=title,
-                        x=x, y=y, width=x2 - x, height=y2 - y,
-                    ))
+                    results.append(
+                        WindowInfo(
+                            handle=hwnd,
+                            title=title,
+                            x=x,
+                            y=y,
+                            width=x2 - x,
+                            height=y2 - y,
+                        )
+                    )
                 except Exception:
                     pass
 
@@ -93,7 +103,10 @@ class _WindowsBackend:
             self._win32gui.SetWindowPos(
                 hwnd,
                 self._win32con.HWND_TOP,
-                x, y, w, h,
+                x,
+                y,
+                w,
+                h,
                 self._win32con.SWP_SHOWWINDOW,
             )
             return True
@@ -108,6 +121,7 @@ class _WindowsBackend:
 
         windows: list[dict] = []
         if self.available:
+
             def _cb(hwnd: int, _: Any) -> None:
                 if not self._win32gui.IsWindowVisible(hwnd):
                     return
@@ -117,26 +131,30 @@ class _WindowsBackend:
                 try:
                     rect = self._win32gui.GetWindowRect(hwnd)
                     x, y, x2, y2 = rect
-                    windows.append({"hwnd": hwnd, "title": title,
-                                    "x": x, "y": y, "w": x2 - x, "h": y2 - y})
+                    windows.append(
+                        {"hwnd": hwnd, "title": title, "x": x, "y": y, "w": x2 - x, "h": y2 - y}
+                    )
                 except Exception:
                     pass
+
             self._win32gui.EnumWindows(_cb, None)
 
-        layout_path.write_text(json.dumps({"mode": mode_name, "windows": windows},
-                                           ensure_ascii=False, indent=2), encoding="utf-8")
+        layout_path.write_text(
+            json.dumps({"mode": mode_name, "windows": windows}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         return layout_path
 
 
 # ── Linux Backend ────────────────────────────────────────────────────────────
+
 
 class _LinuxBackend:
     """wmctrl + xdotool tabanlı Linux pencere yöneticisi."""
 
     def get_screen_size(self) -> tuple[int, int]:
         try:
-            out = subprocess.check_output(["xdotool", "getdisplaygeometry"],
-                                          text=True).strip()
+            out = subprocess.check_output(["xdotool", "getdisplaygeometry"], text=True).strip()
             w, h = out.split()
             return int(w), int(h)
         except Exception:
@@ -144,9 +162,7 @@ class _LinuxBackend:
 
     def find_windows(self, app_name: str) -> list[WindowInfo]:
         try:
-            out = subprocess.check_output(
-                ["wmctrl", "-l", "-G"], text=True
-            )
+            out = subprocess.check_output(["wmctrl", "-l", "-G"], text=True)
         except FileNotFoundError:
             logger.warning("wmctrl yüklü değil. `sudo apt install wmctrl`")
             return []
@@ -159,17 +175,24 @@ class _LinuxBackend:
             win_id, _desktop, x, y, w, h = parts[0], parts[1], *parts[2:6]
             title = parts[-1]
             if app_name.lower() in title.lower():
-                results.append(WindowInfo(
-                    handle=win_id, title=title,
-                    x=int(x), y=int(y), width=int(w), height=int(h),
-                ))
+                results.append(
+                    WindowInfo(
+                        handle=win_id,
+                        title=title,
+                        x=int(x),
+                        y=int(y),
+                        width=int(w),
+                        height=int(h),
+                    )
+                )
         return results
 
     def move_window(self, win_id: str, x: int, y: int, w: int, h: int) -> bool:
         try:
             subprocess.run(
                 ["wmctrl", "-ir", win_id, "-e", f"0,{x},{y},{w},{h}"],
-                check=True, capture_output=True,
+                check=True,
+                capture_output=True,
             )
             return True
         except Exception as e:
@@ -184,12 +207,15 @@ class _LinuxBackend:
             windows = [{"raw": line} for line in out.splitlines() if line]
         except Exception:
             windows = []
-        layout_path.write_text(json.dumps({"mode": mode_name, "windows": windows},
-                                           ensure_ascii=False, indent=2), encoding="utf-8")
+        layout_path.write_text(
+            json.dumps({"mode": mode_name, "windows": windows}, ensure_ascii=False, indent=2),
+            encoding="utf-8",
+        )
         return layout_path
 
 
 # ── macOS Backend ──────────────────────────────────────────────────────────
+
 
 class _MacOSBackend:
     """AppleScript tabanlı macOS pencere yöneticisi (minimal)."""
@@ -212,12 +238,14 @@ class _MacOSBackend:
     def save_layout(self, mode_name: str) -> Path:
         LAYOUTS_DIR.mkdir(parents=True, exist_ok=True)
         path = LAYOUTS_DIR / f"{mode_name}.json"
-        path.write_text(json.dumps({"mode": mode_name, "windows": [], "platform": "macos"}),
-                        encoding="utf-8")
+        path.write_text(
+            json.dumps({"mode": mode_name, "windows": [], "platform": "macos"}), encoding="utf-8"
+        )
         return path
 
 
 # ── Arrangement Helpers ────────────────────────────────────────────────────
+
 
 def _compute_positions(
     arrangement: str, screen_w: int, screen_h: int, app_count: int
@@ -241,14 +269,10 @@ def _compute_positions(
             (0, 0, half_w, screen_h),
             (half_w, 0, half_w, screen_h),
         ]
-        return result[:min(app_count, 2)]
-
+        return result[: min(app_count, 2)]
 
     if arrangement == "triple-column":
-        return [
-            (i * third_w, 0, third_w, screen_h)
-            for i in range(min(app_count, 3))
-        ]
+        return [(i * third_w, 0, third_w, screen_h) for i in range(min(app_count, 3))]
 
     if arrangement == "main-secondary":
         result = [(0, 0, int(screen_w * 0.65), screen_h)]  # Ana
@@ -263,6 +287,7 @@ def _compute_positions(
 
 
 # ── Main Agent ─────────────────────────────────────────────────────────────
+
 
 class LayoutAgent(BaseAgent):
     """Masaüstü pencere düzenleyici agent.
@@ -289,7 +314,8 @@ class LayoutAgent(BaseAgent):
         layout_cfg: dict[str, Any] = event.config.get("layout", {})
         if not layout_cfg:
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message="Layout: Config'de layout bölümü yok, atlandı.",
             )
 
@@ -313,16 +339,19 @@ class LayoutAgent(BaseAgent):
 
         if not app_names:
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message="Layout: Düzenlenecek uygulama yok.",
             )
 
         if event.dry_run:
             positions = _compute_positions(arrangement, screen_w, screen_h, len(app_names))
-            details = [f"{app} → ({x},{y}) {w}x{h}" for app, (x, y, w, h)
-                       in zip(app_names, positions)]
+            details = [
+                f"{app} → ({x},{y}) {w}x{h}" for app, (x, y, w, h) in zip(app_names, positions)
+            ]
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message=f"Layout [dry-run]: '{arrangement}' düzeni uygulanacak.",
                 details={"positions": details, "screen": f"{screen_w}x{screen_h}"},
             )
@@ -353,7 +382,9 @@ class LayoutAgent(BaseAgent):
         return StatusReport(
             agent_name=self.name,
             success=True,
-            message=f"Layout '{arrangement}': {len(moved)} pencere düzenlendi, {len(skipped)} atlandı.",
+            message=(
+                f"Layout '{arrangement}': {len(moved)} pencere düzenlendi, {len(skipped)} atlandı."
+            ),
             details={"moved": moved, "skipped": skipped, "screen": f"{screen_w}x{screen_h}"},
         )
 
@@ -361,12 +392,16 @@ class LayoutAgent(BaseAgent):
         """Önceki mod layout'unu geri yükler (varsa)."""
         prev_mode = event.previous_mode
         if not prev_mode:
-            return StatusReport(agent_name=self.name, success=True,
-                                message="Layout rollback: Önceki mod yok.")
+            return StatusReport(
+                agent_name=self.name, success=True, message="Layout rollback: Önceki mod yok."
+            )
         layout_path = LAYOUTS_DIR / f"{prev_mode}.json"
         if not layout_path.exists():
-            return StatusReport(agent_name=self.name, success=True,
-                                message=f"Layout rollback: '{prev_mode}' için kayıt bulunamadı.")
+            return StatusReport(
+                agent_name=self.name,
+                success=True,
+                message=f"Layout rollback: '{prev_mode}' için kayıt bulunamadı.",
+            )
 
         # Kaydedilmiş pencere konumlarını geri yükle
         try:
@@ -376,13 +411,19 @@ class LayoutAgent(BaseAgent):
                 if IS_WINDOWS and "hwnd" in win_data:
                     ok = self._backend.move_window(  # type: ignore[arg-type]
                         win_data["hwnd"],
-                        win_data["x"], win_data["y"],
-                        win_data["w"], win_data["h"],
+                        win_data["x"],
+                        win_data["y"],
+                        win_data["w"],
+                        win_data["h"],
                     )
                     if ok:
                         restored += 1
-            return StatusReport(agent_name=self.name, success=True,
-                                message=f"Layout rollback: {restored} pencere eski konumuna döndü.")
+            return StatusReport(
+                agent_name=self.name,
+                success=True,
+                message=f"Layout rollback: {restored} pencere eski konumuna döndü.",
+            )
         except Exception as e:
-            return StatusReport(agent_name=self.name, success=False,
-                                message=f"Layout rollback hatası: {e}")
+            return StatusReport(
+                agent_name=self.name, success=False, message=f"Layout rollback hatası: {e}"
+            )

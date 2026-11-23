@@ -14,7 +14,7 @@ authors = [
 ]
 keywords = ["productivity", "workspace", "context", "automation", "cli", "tui"]
 classifiers = [
-    "Development Status :: 5 - Production/Stable",
+    "Development Status :: 4 - Beta",
     "Environment :: Console",
     "Environment :: Win32 (MS Windows)",
     "Environment :: X11 Applications",
@@ -49,6 +49,7 @@ dependencies = [
 dev = [
     "pytest>=7.0",
     "pytest-mock>=3.10",
+    "pytest-cov>=4.0",
     "ruff>=0.4.0",
     "pre-commit>=3.0",
 ]

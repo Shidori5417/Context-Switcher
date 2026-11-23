@@ -15,7 +15,7 @@ def setup_logger(name: str = "context_switcher") -> logging.Logger:
     log_file = LOGS_DIR / "app.log"
 
     logger = logging.getLogger(name)
-    
+
     # Zaten yapılandırıldıysa tekrar ekleme
     if logger.handlers:
         return logger

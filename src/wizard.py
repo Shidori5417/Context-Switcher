@@ -34,9 +34,7 @@ def run_wizard() -> None:
     mode_name: str = typer.prompt("Mod adı (örn: dev, study, gaming)")
     mode_name = mode_name.strip().lower().replace(" ", "-")
 
-    display_name: str = typer.prompt(
-        "Görüntülenen ad", default=mode_name.capitalize()
-    )
+    display_name: str = typer.prompt("Görüntülenen ad", default=mode_name.capitalize())
     icon: str = typer.prompt("İkon (emoji, opsiyonel)", default="")
     hotkey: str = typer.prompt("Klavye kısayolu (opsiyonel, örn: Ctrl+Alt+D)", default="")
 
@@ -132,9 +130,7 @@ def run_wizard() -> None:
     output_path = MODES_DIR / f"{mode_name}.yaml"
 
     if output_path.exists():
-        overwrite = typer.confirm(
-            f"'{output_path}' zaten var. Üzerine yaz?", default=False
-        )
+        overwrite = typer.confirm(f"'{output_path}' zaten var. Üzerine yaz?", default=False)
         if not overwrite:
             console.print("[yellow]İptal edildi.[/yellow]")
             raise typer.Exit()
@@ -158,9 +154,20 @@ def _list_user_processes(limit: int = 20) -> list[tuple[str, float]]:
     """En çok RAM kullanan kullanıcı süreçlerini listeler."""
     procs: list[tuple[str, float]] = []
     seen: set[str] = set()
-    skip = {"system", "idle", "registry", "smss.exe", "csrss.exe",
-            "wininit.exe", "services.exe", "lsass.exe", "python.exe",
-            "python3", "python", "conhost.exe"}
+    skip = {
+        "system",
+        "idle",
+        "registry",
+        "smss.exe",
+        "csrss.exe",
+        "wininit.exe",
+        "services.exe",
+        "lsass.exe",
+        "python.exe",
+        "python3",
+        "python",
+        "conhost.exe",
+    }
 
     for proc in psutil.process_iter(["name", "memory_info"]):
         try:

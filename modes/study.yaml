@@ -15,6 +15,8 @@ processes:
     - slack
     - telegram
     - chrome # Eğer çalışma için ayrı bir tarayıcı/profil kullanılmıyorsa genel tarayıcıyı dondurabilir
+    - "Google Chrome" # macOS süreç adı (tam ad eşleşmesi)
+    - google-chrome # Linux paket yürütülebilir adı
 
 layout:
   workspace: 1

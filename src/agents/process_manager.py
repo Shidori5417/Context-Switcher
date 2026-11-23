@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import logging
+import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -11,16 +13,55 @@ import psutil
 
 from src.agents.base_agent import BaseAgent
 from src.core.event_bus import AgentName, StatusReport, SwitchEvent
+from src.core.procs import ProcEntry, make_entry, matches_entry, merge_entries, normalize_entries
 
 logger = logging.getLogger(__name__)
 
 # Sistem süreçleri — asla dokunulmaz
-_SYSTEM_PROCESS_NAMES = frozenset({
-    "system", "smss.exe", "csrss.exe", "wininit.exe", "services.exe",
-    "lsass.exe", "svchost.exe", "winlogon.exe", "explorer.exe",
-    "systemd", "init", "kthreadd", "ksoftirqd",
-    "python", "python3", "python.exe",  # Kendimizi dondurma
-})
+_SYSTEM_PROCESS_NAMES = frozenset(
+    {
+        "system",
+        "smss.exe",
+        "csrss.exe",
+        "wininit.exe",
+        "services.exe",
+        "lsass.exe",
+        "svchost.exe",
+        "winlogon.exe",
+        "explorer.exe",
+        "systemd",
+        "init",
+        "kthreadd",
+        "ksoftirqd",
+        "python",
+        "python3",
+        "python.exe",  # Kendimizi dondurma
+    }
+)
+
+
+def _strip_exe(name: str) -> str:
+    return name[:-4] if name.endswith(".exe") else name
+
+
+def _basename(path: str) -> str:
+    """Hem Windows (\\) hem POSIX (/) ayraçlarıyla dosya adını döner."""
+    return path.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+# Linux'ta /proc/<pid>/comm (psutil name()) en fazla 15 karakterdir
+_LINUX_COMM_MAX = 15
+
+
+def _is_linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
+def _cmdline0_basename(cmdline: Any) -> str:
+    """cmdline[0]'ın basename'i (küçük harf, .exe'siz); yoksa boş string."""
+    if isinstance(cmdline, (list, tuple)) and cmdline and isinstance(cmdline[0], str):
+        return _strip_exe(_basename(cmdline[0]).lower())
+    return ""
 
 
 @dataclass
@@ -29,10 +70,11 @@ class ProcessAction:
 
     pid: int
     name: str
-    action: str           # "suspended" | "resumed" | "started" | "skipped"
+    action: str  # "suspended" | "resumed" | "started" | "skipped"
     memory_mb: float = 0.0
     cpu_percent: float = 0.0
     error: str | None = None
+    create_time: float | None = None
 
 
 @dataclass
@@ -53,8 +95,9 @@ class ResourceReport:
     def summary(self) -> str:
         parts = []
         if self.suspended:
-            parts.append(f"{len(self.suspended)} donduruldu"
-                         f" ({self.saved_memory_mb:.0f} MB kurtarıldı)")
+            parts.append(
+                f"{len(self.suspended)} donduruldu ({self.saved_memory_mb:.0f} MB kurtarıldı)"
+            )
         if self.started:
             parts.append(f"{len(self.started)} başlatıldı")
         if self.errors:
@@ -75,6 +118,8 @@ class ProcessManagerAgent(BaseAgent):
         self._protected = _SYSTEM_PROCESS_NAMES | frozenset(
             n.lower() for n in (extra_protected or [])
         )
+        # Dondurulan süreçler, ANINDA kaydedilir (döngü ortasında hata olsa bile kaybolmaz)
+        self._last_suspended_procs: list[ProcEntry] = []
 
     @property
     def name(self) -> str:
@@ -85,16 +130,29 @@ class ProcessManagerAgent(BaseAgent):
     def find_processes(self, app_name: str) -> list[psutil.Process]:
         """Uygulama adına göre çalışan süreçleri bulur.
 
-        Hem `process.name()` hem de executable path ile eşleştirir.
-        Case-insensitive.
+        Süreç adı veya executable dosya adı (basename) ile TAM eşleşme arar;
+        büyük/küçük harf duyarsızdır ve `.exe` uzantısı olsa da olmasa da eşleşir.
+        (`code` -> `code`, `Code.exe`; ama `t3code` veya `vscode-server` değil.)
+
+        Linux'ta süreç adı (`/proc/<pid>/comm`) 15 karaktere kırpıldığı için, hedef ad
+        15 karakterden uzunsa kırpılmış adı taşıyan süreç de, exe basename'i veya
+        cmdline[0] basename'i tam hedefle eşleşiyorsa kabul edilir.
         """
-        target = app_name.lower()
+        target = _strip_exe(app_name.strip().lower())
         results: list[psutil.Process] = []
-        for proc in psutil.process_iter(["pid", "name", "exe", "status"]):
+        for proc in psutil.process_iter(["pid", "name", "exe", "status", "cmdline"]):
             try:
-                proc_name = (proc.info["name"] or "").lower()
-                proc_exe = (proc.info["exe"] or "").lower()
-                if target in proc_name or proc_name.startswith(target) or target in proc_exe:
+                proc_name = _strip_exe((proc.info["name"] or "").lower())
+                proc_exe = _strip_exe(_basename(proc.info["exe"] or "").lower())
+                if target and target in (proc_name, proc_exe):
+                    results.append(proc)
+                elif (
+                    target
+                    and len(target) > _LINUX_COMM_MAX
+                    and _is_linux()
+                    and proc_name == target[:_LINUX_COMM_MAX]
+                    and target in (proc_exe, _cmdline0_basename(proc.info.get("cmdline")))
+                ):
                     results.append(proc)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -110,6 +168,8 @@ class ProcessManagerAgent(BaseAgent):
         """
         report = ResourceReport()
         suspended_pids: list[int] = []
+        if not dry_run:
+            self._last_suspended_procs = []
 
         for app_name in app_names:
             procs = self.find_processes(app_name)
@@ -122,6 +182,8 @@ class ProcessManagerAgent(BaseAgent):
                 action = self._suspend_one(proc, dry_run)
                 if action.action == "suspended":
                     suspended_pids.append(action.pid)
+                    if not dry_run:
+                        self._record_suspended(action)
                     report.suspended.append(action)
                 elif action.error:
                     report.errors.append(action)
@@ -131,21 +193,42 @@ class ProcessManagerAgent(BaseAgent):
         return suspended_pids, report
 
     def resume_processes(
-        self, pids: list[int], dry_run: bool = False
+        self, pids: list[int] | list[ProcEntry], dry_run: bool = False
     ) -> ResourceReport:
-        """PID listesindeki süreçleri devam ettirir."""
+        """Süreçleri devam ettirir.
+
+        Liste düz PID'lerden (eski format) veya {pid, create_time} kayıtlarından
+        oluşabilir. create_time kayıtlıysa ve canlı sürecinkiyle uyuşmuyorsa
+        (PID başka bir sürece geçmiş) süreç atlanır.
+        """
         report = ResourceReport()
-        for pid in pids:
-            action = self._resume_one(pid, dry_run)
+        for entry in normalize_entries(pids):
+            action = self._resume_one(entry["pid"], dry_run, entry.get("create_time"))
             if action.action == "resumed":
                 report.resumed.append(action)
             elif action.error:
                 report.errors.append(action)
         return report
 
-    def start_processes(
-        self, commands: list[str], dry_run: bool = False
-    ) -> ResourceReport:
+    def resuspend_processes(self, entries: list[ProcEntry]) -> list[ProcEntry]:
+        """Bu geçiş denemesinde uyandırılmış süreçleri tekrar dondurur (abort durumunda).
+
+        create_time uyuşmayan (PID yeniden kullanılmış) ya da artık var olmayan
+        süreçlere dokunulmaz. Döner: gerçekten yeniden dondurulan kayıtlar.
+        """
+        restored: list[ProcEntry] = []
+        for entry in normalize_entries(entries):
+            try:
+                proc = psutil.Process(entry["pid"])
+                if not matches_entry(proc, entry):
+                    continue
+                proc.suspend()
+                restored.append(entry)
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                logger.warning("PID %s yeniden dondurulamadı: %s", entry["pid"], e)
+        return restored
+
+    def start_processes(self, commands: list[str], dry_run: bool = False) -> ResourceReport:
         """Komut listesindeki uygulamaları başlatır."""
         report = ResourceReport()
         for cmd in commands:
@@ -166,23 +249,35 @@ class ProcessManagerAgent(BaseAgent):
 
         all_suspended_pids: list[int] = []
         combined_report = ResourceReport()
+        self._last_suspended_procs = []
 
-        # 1. Suspend
-        if suspend_list:
-            pids, report = self.suspend_processes(suspend_list, dry_run=event.dry_run)
-            all_suspended_pids.extend(pids)
-            combined_report.suspended.extend(report.suspended)
-            combined_report.skipped.extend(report.skipped)
-            combined_report.errors.extend(report.errors)
+        try:
+            # 1. Suspend
+            if suspend_list:
+                pids, report = self.suspend_processes(suspend_list, dry_run=event.dry_run)
+                all_suspended_pids.extend(pids)
+                combined_report.suspended.extend(report.suspended)
+                combined_report.skipped.extend(report.skipped)
+                combined_report.errors.extend(report.errors)
 
-        # Hata anında rollback fırlatılabilmesi için anlık olarak sakla
-        self._last_suspended_pids = all_suspended_pids
-
-        # 2. Start
-        if start_list:
-            report = self.start_processes(start_list, dry_run=event.dry_run)
-            combined_report.started.extend(report.started)
-            combined_report.errors.extend(report.errors)
+            # 2. Start
+            if start_list:
+                report = self.start_processes(start_list, dry_run=event.dry_run)
+                combined_report.started.extend(report.started)
+                combined_report.errors.extend(report.errors)
+        except Exception as e:
+            # Döngü ortasında hata: o ana kadar dondurulanlar _last_suspended_procs'ta
+            # kayıtlı; orchestrator rollback'inde uyandırılabilmeleri için raporla.
+            logger.exception("Süreç yönetimi sırasında beklenmeyen hata")
+            return StatusReport(
+                agent_name=self.name,
+                success=False,
+                message=f"Süreç yönetimi hatası: {e}",
+                details={
+                    "suspended_pids": [p["pid"] for p in self._last_suspended_procs],
+                    "suspended_procs": list(self._last_suspended_procs),
+                },
+            )
 
         success = len(combined_report.errors) == 0
         return StatusReport(
@@ -191,6 +286,14 @@ class ProcessManagerAgent(BaseAgent):
             message=combined_report.summary,
             details={
                 "suspended_pids": all_suspended_pids,
+                "suspended_procs": (
+                    []
+                    if event.dry_run
+                    else [
+                        {"pid": a.pid, "create_time": a.create_time}
+                        for a in combined_report.suspended
+                    ]
+                ),
                 "suspended": [a.name for a in combined_report.suspended],
                 "started": [a.name for a in combined_report.started],
                 "skipped": [a.name for a in combined_report.skipped],
@@ -202,15 +305,13 @@ class ProcessManagerAgent(BaseAgent):
     def rollback(self, event: SwitchEvent) -> StatusReport:
         """Geçişi geri alır: state.json ve geçici bellekten PID'leri okur."""
         from src.core.state import get_state
+
         state = get_state()
-        
-        pids: list[int] = list(state.suspended_pids)
-        pids.extend(getattr(self, "_last_suspended_pids", []))
-        pids = list(set(pids)) # Benzersiz
-        
-        report = self.resume_processes(pids)
-        if hasattr(self, "_last_suspended_pids"):
-            self._last_suspended_pids = []
+
+        entries = merge_entries(self._last_suspended_procs, state.suspended_pids)
+
+        report = self.resume_processes(entries)
+        self._last_suspended_procs = []
 
         return StatusReport(
             agent_name=self.name,
@@ -220,6 +321,10 @@ class ProcessManagerAgent(BaseAgent):
         )
 
     # ── Helpers ───────────────────────────────────────────────────────────────
+
+    def _record_suspended(self, action: ProcessAction) -> None:
+        """Dondurulan süreci hemen kaydeder (sonraki bir hata kaydı kaybettirmesin)."""
+        self._last_suspended_procs.append({"pid": action.pid, "create_time": action.create_time})
 
     def _is_protected(self, proc: psutil.Process) -> bool:
         try:
@@ -248,33 +353,47 @@ class ProcessManagerAgent(BaseAgent):
                 proc.suspend()
 
             return ProcessAction(
-                pid=proc.pid, name=proc_name, action="suspended",
-                memory_mb=mem_mb, cpu_percent=cpu,
+                pid=proc.pid,
+                name=proc_name,
+                action="suspended",
+                memory_mb=mem_mb,
+                cpu_percent=cpu,
+                create_time=make_entry(proc)["create_time"],
             )
         except psutil.AccessDenied as e:
             return ProcessAction(
-                pid=getattr(proc, "pid", 0), name="unknown", action="error",
+                pid=getattr(proc, "pid", 0),
+                name="unknown",
+                action="error",
                 error=f"Yetki hatası: {e}",
             )
         except psutil.NoSuchProcess:
             return ProcessAction(pid=0, name="unknown", action="skipped")
 
-    def _resume_one(self, pid: int, dry_run: bool) -> ProcessAction:
+    def _resume_one(
+        self, pid: int, dry_run: bool, create_time: float | None = None
+    ) -> ProcessAction:
         try:
             proc = psutil.Process(pid)
+            if not matches_entry(proc, {"pid": pid, "create_time": create_time}):
+                return ProcessAction(
+                    pid=pid,
+                    name="?",
+                    action="skipped",
+                    error=f"PID {pid} başka bir sürece ait (yeniden kullanılmış)",
+                )
             name = proc.name()
             if not dry_run:
                 proc.resume()
             return ProcessAction(pid=pid, name=name, action="resumed")
         except psutil.NoSuchProcess:
-            return ProcessAction(pid=pid, name="?", action="skipped",
-                                 error=f"PID {pid} artık mevcut değil")
+            return ProcessAction(
+                pid=pid, name="?", action="skipped", error=f"PID {pid} artık mevcut değil"
+            )
         except psutil.AccessDenied as e:
-            return ProcessAction(pid=pid, name="?", action="error",
-                                 error=f"Yetki hatası: {e}")
+            return ProcessAction(pid=pid, name="?", action="error", error=f"Yetki hatası: {e}")
 
     def _start_one(self, cmd: str, dry_run: bool) -> ProcessAction:
-        import os
         exe_name = cmd.split()[0]
         try:
             if not dry_run:
@@ -288,7 +407,11 @@ class ProcessManagerAgent(BaseAgent):
                         start_new_session=True,
                     )
                 except FileNotFoundError:
-                    if os.name == "nt" and not exe_name.endswith(".cmd") and not exe_name.endswith(".exe"):
+                    if (
+                        os.name == "nt"
+                        and not exe_name.endswith(".cmd")
+                        and not exe_name.endswith(".exe")
+                    ):
                         # 'code' Windows'ta 'code.cmd' dosyasıdır ve shell komutudur.
                         subprocess.Popen(
                             cmd,
@@ -302,7 +425,9 @@ class ProcessManagerAgent(BaseAgent):
             return ProcessAction(pid=0, name=exe_name, action="started")
         except FileNotFoundError:
             return ProcessAction(
-                pid=0, name=cmd, action="error",
+                pid=0,
+                name=cmd,
+                action="error",
                 error=f"Uygulama veya komut bulunamadı: {exe_name!r}",
             )
         except Exception as e:

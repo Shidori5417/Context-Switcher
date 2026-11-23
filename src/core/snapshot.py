@@ -9,6 +9,8 @@ from typing import Any
 
 import psutil
 
+from src.core.procs import matches_entry, normalize_entries
+
 SNAPSHOT_DIR = Path.home() / ".context-switcher" / "snapshots"
 
 
@@ -35,7 +37,7 @@ def _safe_exe(proc: psutil.Process) -> str:
         return ""
 
 
-def take_snapshot(mode_name: str, suspended_pids: list[int] | None = None) -> Path:
+def take_snapshot(mode_name: str, suspended_pids: list[int | dict] | None = None) -> Path:
     """Mevcut kullanıcı süreçlerinin anlık görüntüsünü alır.
 
     Args:
@@ -59,7 +61,7 @@ def take_snapshot(mode_name: str, suspended_pids: list[int] | None = None) -> Pa
     snapshot = {
         "mode_name": mode_name,
         "timestamp": datetime.now().isoformat(),
-        "suspended_pids": suspended_pids or [],
+        "suspended_pids": list(suspended_pids or []),
         "processes": processes,
     }
 
@@ -84,18 +86,29 @@ def restore_snapshot(snapshot_path: Path) -> list[int]:
         Başarıyla resume edilen PID listesi.
     """
     data = load_snapshot(snapshot_path)
-    suspended_pids: list[int] = data.get("suspended_pids", [])
     resumed: list[int] = []
 
-    for pid in suspended_pids:
+    for entry in normalize_entries(data.get("suspended_pids", [])):
         try:
-            proc = psutil.Process(pid)
+            proc = psutil.Process(entry["pid"])
+            if not matches_entry(proc, entry):
+                continue  # PID başka bir sürece geçmiş — dokunma
             proc.resume()
-            resumed.append(pid)
+            resumed.append(entry["pid"])
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.Error):
             pass  # Süreç zaten ölmüş ya da yetki yok — atla
 
     return resumed
+
+
+def update_snapshot_suspended(snapshot_path: Path, suspended: list[int | dict]) -> None:
+    """Snapshot'taki suspended_pids alanını geçiş sonrası gerçek değerle günceller."""
+    data = load_snapshot(snapshot_path)
+    data["suspended_pids"] = normalize_entries(suspended)
+    snapshot_path.write_text(
+        json.dumps(data, ensure_ascii=False, indent=2),
+        encoding="utf-8",
+    )
 
 
 def list_snapshots() -> list[Path]:

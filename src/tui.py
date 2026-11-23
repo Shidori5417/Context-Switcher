@@ -13,6 +13,7 @@ from rich.table import Table
 from src.core.config_loader import discover_modes
 from src.core.state import get_state
 
+
 def _generate_mode_table() -> Table:
     """Kayıtlı modları ve aktiflik durumunu gösterir."""
     state = get_state()
@@ -34,46 +35,45 @@ def _generate_mode_table() -> Table:
 
     return table
 
+
 def _generate_stats_panel() -> Panel:
     """Sistem state istatistiklerini gösterir."""
     state = get_state()
-    
+
     lines = [
         f"[bold cyan]Geçerli Mod:[/bold cyan] {state.current_mode or 'Yok'}",
         f"[bold cyan]Önceki Mod:[/bold cyan] {state.previous_mode or 'Yok'}",
         f"[bold cyan]Son Geçiş:[/bold cyan] {state.switched_at or 'Hiç'}",
-        f"[bold yellow]Dondurulan Süreç (Suspend):[/bold yellow] {len(state.suspended_pids)} Process",
+        "[bold yellow]Dondurulan Süreç (Suspend):[/bold yellow] "
+        f"{len(state.suspended_pids)} Process",
         f"[bold magenta]Son Snapshot:[/bold magenta] {state.last_snapshot or 'Yok'}",
     ]
-    
-    return Panel(
-        "\n\n".join(lines),
-        title="📊 Sistem İstatistikleri",
-        border_style="cyan"
-    )
+
+    return Panel("\n\n".join(lines), title="📊 Sistem İstatistikleri", border_style="cyan")
+
 
 def _generate_layout() -> Layout:
     """Dashboard yerleşimini oluşturur."""
     layout = Layout()
     layout.split_column(
-        Layout(name="header", size=3),
-        Layout(name="main"),
-        Layout(name="footer", size=3)
+        Layout(name="header", size=3), Layout(name="main"), Layout(name="footer", size=3)
     )
-    
-    layout["main"].split_row(
-        Layout(name="left", ratio=2),
-        Layout(name="right", ratio=3)
-    )
-    
+
+    layout["main"].split_row(Layout(name="left", ratio=2), Layout(name="right", ratio=3))
+
     now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    layout["header"].update(Panel(f"[bold]Context-Switcher Dashboard[/bold] | {now}", style="bold white on blue"))
+    layout["header"].update(
+        Panel(f"[bold]Context-Switcher Dashboard[/bold] | {now}", style="bold white on blue")
+    )
     layout["footer"].update(Panel("[dim]Çıkmak için Ctrl+C'ye basın...[/dim]"))
-    
+
     layout["left"].update(_generate_stats_panel())
-    layout["right"].update(Panel(_generate_mode_table(), title="⚙️ Tanımlı Modlar", border_style="magenta"))
-    
+    layout["right"].update(
+        Panel(_generate_mode_table(), title="⚙️ Tanımlı Modlar", border_style="magenta")
+    )
+
     return layout
+
 
 def run_dashboard() -> None:
     """Live dashboard'u başlatır."""

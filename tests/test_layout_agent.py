@@ -2,9 +2,7 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
+from unittest.mock import patch
 
 from src.agents.layout_agent import (
     LayoutAgent,
@@ -26,6 +24,7 @@ def _make_event(arrangement: str = "split-left-right", primary: str = "vscode") 
 
 
 # ── _compute_positions ──────────────────────────────────────────────────────
+
 
 class TestComputePositions:
     def test_fullscreen(self):
@@ -65,6 +64,7 @@ class TestComputePositions:
 
 
 # ── LayoutAgent.execute — Windows Backend ──────────────────────────────────
+
 
 class TestLayoutAgentExecute:
     def test_no_config_skipped(self):

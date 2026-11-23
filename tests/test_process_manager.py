@@ -139,6 +139,7 @@ class TestResumeProcesses:
             report = agent.resume_processes([5000], dry_run=True)
 
         mock_proc.resume.assert_not_called()
+        assert len(report.resumed) == 1
 
 
 class TestStartProcesses:
@@ -177,6 +178,7 @@ class TestExecute:
             patch.object(agent, "start_processes") as mock_start,
         ):
             from src.agents.process_manager import ResourceReport
+
             mock_suspend.return_value = ([5000], ResourceReport())
             mock_start.return_value = ResourceReport()
 
@@ -193,6 +195,7 @@ class TestExecute:
 
         with patch.object(agent, "suspend_processes") as mock_suspend:
             from src.agents.process_manager import ResourceReport
+
             mock_suspend.return_value = ([], ResourceReport())
             agent.execute(event)
 

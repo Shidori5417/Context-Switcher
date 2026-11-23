@@ -33,3 +33,7 @@ layouts/
 .pytest_cache/
 .coverage
 htmlcov/
+
+# Local test output
+tests_out.txt
+test_results.log

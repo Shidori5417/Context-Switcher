@@ -2,7 +2,8 @@
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, call, patch
+import sys
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -27,15 +28,18 @@ def _make_event(volume: int = 60, playlist: str = "", dry_run: bool = False) -> 
 
 
 class TestSetVolume:
+    @pytest.mark.skipif(sys.platform != "win32", reason="ctypes.windll yalnızca Windows'ta var")
     def test_clamps_above_100(self):
         # 150 → clamp → 100, herhangi bir çağrı başarılı dönmeli
         with patch("ctypes.windll", MagicMock()):
             result = set_volume(150)
-        # Test: çökmemeli — return değeri bool
+        assert isinstance(result, bool)  # çökmemeli
 
+    @pytest.mark.skipif(sys.platform != "win32", reason="ctypes.windll yalnızca Windows'ta var")
     def test_clamps_below_0(self):
         with patch("ctypes.windll", MagicMock()):
             result = set_volume(-10)
+        assert isinstance(result, bool)
 
     def test_linux_pactl(self):
         with (
@@ -44,14 +48,16 @@ class TestSetVolume:
         ):
             mock_run.return_value.returncode = 0
             from src.agents.environment_agent import _set_volume_linux
-            result = _set_volume_linux(50)
+
+            _set_volume_linux(50)
         mock_run.assert_called()
 
     def test_macos_osascript(self):
         with patch("subprocess.run") as mock_run:
             mock_run.return_value.returncode = 0
             from src.agents.environment_agent import _set_volume_macos
-            result = _set_volume_macos(40)
+
+            _set_volume_macos(40)
         mock_run.assert_called_once()
         args = mock_run.call_args[0][0]
         assert "osascript" in args
@@ -68,6 +74,7 @@ class TestSendNotification:
         # send_notification fonksiyonu try/except içinde çalışıyor
         # Doğrudan Exception verdiren gerçek plyer ile test
         from plyer import notification as real_notification
+
         original_notify = real_notification.notify
         try:
             real_notification.notify = MagicMock(side_effect=Exception("no display"))
@@ -80,6 +87,7 @@ class TestSendNotification:
     def test_notify_returns_true_on_success(self):
         """plyer başarılı olduğunda True dönmeli."""
         from plyer import notification as real_notification
+
         original_notify = real_notification.notify
         try:
             real_notification.notify = MagicMock(return_value=None)
@@ -88,7 +96,6 @@ class TestSendNotification:
             real_notification.notify = original_notify
 
         assert result is True
-
 
 
 class TestEnvironmentAgentExecute:
@@ -125,7 +132,9 @@ class TestEnvironmentAgentExecute:
 
         with (
             patch("src.agents.environment_agent.set_volume", return_value=True),
-            patch("src.agents.environment_agent._spotify_open_playlist", return_value=True) as mock_spot,
+            patch(
+                "src.agents.environment_agent._spotify_open_playlist", return_value=True
+            ) as mock_spot,
             patch("src.agents.environment_agent.send_notification", return_value=True),
         ):
             agent.execute(event)
@@ -138,7 +147,9 @@ class TestEnvironmentAgentExecute:
 
         with (
             patch("src.agents.environment_agent.set_volume", return_value=True),
-            patch("src.agents.environment_agent.send_notification", return_value=True) as mock_notif,
+            patch(
+                "src.agents.environment_agent.send_notification", return_value=True
+            ) as mock_notif,
         ):
             agent.execute(event)
 
@@ -148,7 +159,9 @@ class TestEnvironmentAgentExecute:
         agent = EnvironmentAgent()
         event = SwitchEvent(mode_name="dev", config={}, previous_mode="study")
 
-        with patch("src.agents.environment_agent.send_notification", return_value=True) as mock_notif:
+        with patch(
+            "src.agents.environment_agent.send_notification", return_value=True
+        ) as mock_notif:
             report = agent.rollback(event)
 
         assert report.success

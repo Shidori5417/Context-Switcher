@@ -61,6 +61,7 @@ def detect_browser() -> tuple[str, str] | None:
 
 # ── CDP Client ─────────────────────────────────────────────────────────────
 
+
 class CDPClient:
     """Chrome DevTools Protocol REST API istemcisi.
 
@@ -77,6 +78,7 @@ class CDPClient:
             return self._available
         try:
             import requests
+
             resp = requests.get(f"{self._base}/json/version", timeout=2)
             self._available = resp.status_code == 200
         except Exception:
@@ -87,6 +89,7 @@ class CDPClient:
         """Açık tüm sekmeleri listeler."""
         try:
             import requests
+
             resp = requests.get(f"{self._base}/json", timeout=3)
             return [t for t in resp.json() if t.get("type") == "page"]
         except Exception as e:
@@ -97,6 +100,7 @@ class CDPClient:
         """Yeni sekme açar."""
         try:
             import requests
+
             requests.get(f"{self._base}/json/new?{url}", timeout=3)
             return True
         except Exception:
@@ -106,6 +110,7 @@ class CDPClient:
         """Belirtilen sekmeyi kapatır."""
         try:
             import requests
+
             requests.get(f"{self._base}/json/close/{tab_id}", timeout=3)
             return True
         except Exception:
@@ -114,7 +119,10 @@ class CDPClient:
 
 # ── Browser Launcher ────────────────────────────────────────────────────────
 
-def launch_browser_with_cdp(browser_path: str, profile: str | None = None) -> subprocess.Popen | None:
+
+def launch_browser_with_cdp(
+    browser_path: str, profile: str | None = None
+) -> subprocess.Popen | None:
     """Tarayıcıyı CDP portu açık olarak başlatır."""
     cmd = [
         browser_path,
@@ -140,6 +148,7 @@ def launch_browser_with_cdp(browser_path: str, profile: str | None = None) -> su
 
 # ── Main Agent ─────────────────────────────────────────────────────────────
 
+
 class BrowserAgent(BaseAgent):
     """Tarayıcı orkestratörü.
 
@@ -158,13 +167,13 @@ class BrowserAgent(BaseAgent):
         browser_cfg: dict[str, Any] = event.config.get("browser", {})
         if not browser_cfg:
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message="Browser: Config'de browser bölümü yok, atlandı.",
             )
 
         profile = browser_cfg.get("profile")
         tab_groups: list[dict] = browser_cfg.get("tab_groups", [])
-        restore = browser_cfg.get("restore_session", False)
 
         # Tüm açılacak URL'leri topla
         target_urls: list[str] = []
@@ -173,7 +182,8 @@ class BrowserAgent(BaseAgent):
 
         if event.dry_run:
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message=f"Browser [dry-run]: {len(target_urls)} sekme açılacak.",
                 details={"urls": target_urls, "profile": profile},
             )
@@ -192,15 +202,25 @@ class BrowserAgent(BaseAgent):
 
             if not self._cdp.is_available() or app_choice == "default":
                 import webbrowser
-                logger.info("CDP pasif veya 'default' tarayıcı seçili. Sistem varsayılan tarayıcısı sekme açacak.")
+
+                logger.info(
+                    "CDP pasif veya 'default' tarayıcı seçili. "
+                    "Sistem varsayılan tarayıcısı sekme açacak."
+                )
                 opened: int = 0
                 for url in target_urls:
                     if webbrowser.open(url):
                         opened += 1
                 return StatusReport(
-                    agent_name=self.name, success=True,
-                    message=f"Browser: {opened}/{len(target_urls)} sekme varsayılan tarayıcıyla açıldı.",
-                    details={"hint": "Varsayılan tarayıcı kullanıldığından oturum kaydı alınamadı.", "opened": opened},
+                    agent_name=self.name,
+                    success=True,
+                    message=(
+                        f"Browser: {opened}/{len(target_urls)} sekme varsayılan tarayıcıyla açıldı."
+                    ),
+                    details={
+                        "hint": "Varsayılan tarayıcı kullanıldığından oturum kaydı alınamadı.",
+                        "opened": opened,
+                    },
                 )
 
         # Mevcut sekmeleri yedekle
@@ -213,7 +233,8 @@ class BrowserAgent(BaseAgent):
                 opened += 1
 
         return StatusReport(
-            agent_name=self.name, success=True,
+            agent_name=self.name,
+            success=True,
             message=f"Browser: {opened}/{len(target_urls)} sekme açıldı.",
             details={
                 "opened": opened,
@@ -226,20 +247,25 @@ class BrowserAgent(BaseAgent):
         """Önceki mod sekmelerini yedekten geri yükler."""
         if not self._cdp.is_available():
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message="Browser rollback: CDP mevcut değil, atlandı.",
             )
 
         # Son session dosyasını bul
         prev_mode = event.previous_mode
         if not prev_mode:
-            return StatusReport(agent_name=self.name, success=True,
-                                message="Browser rollback: Önceki mod yok.")
+            return StatusReport(
+                agent_name=self.name, success=True, message="Browser rollback: Önceki mod yok."
+            )
 
         session_files = sorted(SESSIONS_DIR.glob(f"*_{prev_mode}.json"), reverse=True)
         if not session_files:
-            return StatusReport(agent_name=self.name, success=True,
-                                message=f"Browser rollback: '{prev_mode}' için session bulunamadı.")
+            return StatusReport(
+                agent_name=self.name,
+                success=True,
+                message=f"Browser rollback: '{prev_mode}' için session bulunamadı.",
+            )
 
         try:
             data = json.loads(session_files[0].read_text(encoding="utf-8"))
@@ -248,12 +274,14 @@ class BrowserAgent(BaseAgent):
                 if self._cdp.open_tab(tab.get("url", "")):
                     restored += 1
             return StatusReport(
-                agent_name=self.name, success=True,
+                agent_name=self.name,
+                success=True,
                 message=f"Browser rollback: {restored} sekme geri yüklendi.",
             )
         except Exception as e:
-            return StatusReport(agent_name=self.name, success=False,
-                                message=f"Browser rollback hatası: {e}")
+            return StatusReport(
+                agent_name=self.name, success=False, message=f"Browser rollback hatası: {e}"
+            )
 
     # ── Helpers ───────────────────────────────────────────────────────────
 
@@ -267,8 +295,11 @@ class BrowserAgent(BaseAgent):
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         path = SESSIONS_DIR / f"{timestamp}_{mode_name}.json"
         path.write_text(
-            json.dumps({"mode": mode_name, "timestamp": timestamp, "tabs": tabs},
-                       ensure_ascii=False, indent=2),
+            json.dumps(
+                {"mode": mode_name, "timestamp": timestamp, "tabs": tabs},
+                ensure_ascii=False,
+                indent=2,
+            ),
             encoding="utf-8",
         )
         return path

@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+import sys
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -46,6 +47,21 @@ def _strip_exe(name: str) -> str:
 def _basename(path: str) -> str:
     """Hem Windows (\\) hem POSIX (/) ayraçlarıyla dosya adını döner."""
     return path.replace("\\", "/").rsplit("/", 1)[-1]
+
+
+# Linux'ta /proc/<pid>/comm (psutil name()) en fazla 15 karakterdir
+_LINUX_COMM_MAX = 15
+
+
+def _is_linux() -> bool:
+    return sys.platform.startswith("linux")
+
+
+def _cmdline0_basename(cmdline: Any) -> str:
+    """cmdline[0]'ın basename'i (küçük harf, .exe'siz); yoksa boş string."""
+    if isinstance(cmdline, (list, tuple)) and cmdline and isinstance(cmdline[0], str):
+        return _strip_exe(_basename(cmdline[0]).lower())
+    return ""
 
 
 @dataclass
@@ -117,14 +133,26 @@ class ProcessManagerAgent(BaseAgent):
         Süreç adı veya executable dosya adı (basename) ile TAM eşleşme arar;
         büyük/küçük harf duyarsızdır ve `.exe` uzantısı olsa da olmasa da eşleşir.
         (`code` -> `code`, `Code.exe`; ama `t3code` veya `vscode-server` değil.)
+
+        Linux'ta süreç adı (`/proc/<pid>/comm`) 15 karaktere kırpıldığı için, hedef ad
+        15 karakterden uzunsa kırpılmış adı taşıyan süreç de, exe basename'i veya
+        cmdline[0] basename'i tam hedefle eşleşiyorsa kabul edilir.
         """
         target = _strip_exe(app_name.strip().lower())
         results: list[psutil.Process] = []
-        for proc in psutil.process_iter(["pid", "name", "exe", "status"]):
+        for proc in psutil.process_iter(["pid", "name", "exe", "status", "cmdline"]):
             try:
                 proc_name = _strip_exe((proc.info["name"] or "").lower())
                 proc_exe = _strip_exe(_basename(proc.info["exe"] or "").lower())
                 if target and target in (proc_name, proc_exe):
+                    results.append(proc)
+                elif (
+                    target
+                    and len(target) > _LINUX_COMM_MAX
+                    and _is_linux()
+                    and proc_name == target[:_LINUX_COMM_MAX]
+                    and target in (proc_exe, _cmdline0_basename(proc.info.get("cmdline")))
+                ):
                     results.append(proc)
             except (psutil.NoSuchProcess, psutil.AccessDenied):
                 continue
@@ -181,6 +209,24 @@ class ProcessManagerAgent(BaseAgent):
             elif action.error:
                 report.errors.append(action)
         return report
+
+    def resuspend_processes(self, entries: list[ProcEntry]) -> list[ProcEntry]:
+        """Bu geçiş denemesinde uyandırılmış süreçleri tekrar dondurur (abort durumunda).
+
+        create_time uyuşmayan (PID yeniden kullanılmış) ya da artık var olmayan
+        süreçlere dokunulmaz. Döner: gerçekten yeniden dondurulan kayıtlar.
+        """
+        restored: list[ProcEntry] = []
+        for entry in normalize_entries(entries):
+            try:
+                proc = psutil.Process(entry["pid"])
+                if not matches_entry(proc, entry):
+                    continue
+                proc.suspend()
+                restored.append(entry)
+            except (psutil.NoSuchProcess, psutil.AccessDenied) as e:
+                logger.warning("PID %s yeniden dondurulamadı: %s", entry["pid"], e)
+        return restored
 
     def start_processes(self, commands: list[str], dry_run: bool = False) -> ResourceReport:
         """Komut listesindeki uygulamaları başlatır."""

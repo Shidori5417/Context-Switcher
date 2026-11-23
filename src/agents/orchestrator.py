@@ -16,7 +16,7 @@ from src.core.event_bus import AgentName, StatusReport, SwitchEvent
 from src.core.logger import logger
 from src.core.procs import ProcEntry, merge_entries, normalize_entries
 from src.core.snapshot import take_snapshot, update_snapshot_suspended
-from src.core.state import get_state, update_state
+from src.core.state import get_state, save_state, update_state
 
 console = Console()
 
@@ -42,6 +42,8 @@ class OrchestratorAgent(BaseAgent):
         ]
         # Kritik kabul edilen (çökerse geçiş iptal olan) agent'lar
         self._critical_agents = {AgentName.PROCESS_MANAGER}
+        # Bu geçiş denemesinde uyandırılan önceki mod süreçleri (abort'ta yeniden dondurulur)
+        self._resumed_this_switch: list[ProcEntry] = []
 
     @property
     def name(self) -> str:
@@ -70,6 +72,7 @@ class OrchestratorAgent(BaseAgent):
 
         # 1b. Önceki modun dondurduğu süreçleri uyandır (hedef mod gerekirse yeniden dondurur)
         retained: list[ProcEntry] = []
+        self._resumed_this_switch = []
         if not event.dry_run:
             retained = self._resume_previous(state)
 
@@ -123,6 +126,7 @@ class OrchestratorAgent(BaseAgent):
                 if on_progress is not None:
                     on_progress("Kritik hata! Geri alınıyor (Rollback)...", 100)
                 self._rollback(completed_agents, event)
+                self._restore_previous_mode(state)
                 return StatusReport(
                     agent_name=self.name,
                     success=False,
@@ -224,6 +228,7 @@ class OrchestratorAgent(BaseAgent):
         Yeni mod aynı süreci de dondurmak istiyorsa ProcessManager onu tekrar
         dondurur. Döner: uyandırılamayan (yetki hatası) ve izlenmesi gereken kayıtlar.
         """
+        self._resumed_this_switch = []
         previous = state.suspended_pids if isinstance(state.suspended_pids, list) else []
         entries = normalize_entries(previous)
         if not entries:
@@ -240,7 +245,28 @@ class OrchestratorAgent(BaseAgent):
 
         logger.info("Önceki modun %d süreci uyandırıldı.", len(report.resumed))
         failed = {a.pid for a in report.errors if a.action == "error"}
+        resumed = {a.pid for a in report.resumed}
+        self._resumed_this_switch = [e for e in entries if e["pid"] in resumed]
         return [e for e in entries if e["pid"] in failed]
+
+    def _restore_previous_mode(self, previous_state: Any) -> None:
+        """Geçiş abort olduysa, bu denemede uyandırılan önceki mod süreçlerini tekrar
+        dondurur ve önceki state kaydını geri yazar."""
+        resumed = self._resumed_this_switch
+        self._resumed_this_switch = []
+        if not resumed:
+            return
+        pm = next((a for a in self._agents if isinstance(a, ProcessManagerAgent)), None)
+        if pm is not None:
+            try:
+                restored = pm.resuspend_processes(resumed)
+                logger.info("Abort: önceki modun %d süreci yeniden donduruldu.", len(restored))
+            except Exception as e:
+                logger.error("Önceki modun süreçleri yeniden dondurulamadı: %s", e)
+        try:
+            save_state(previous_state)
+        except Exception as e:
+            logger.error("Önceki state geri yazılamadı: %s", e)
 
     def _collect_suspended_procs(self, reports: list[StatusReport]) -> list[ProcEntry]:
         """Tüm raporlardan suspend edilen süreçleri ({pid, create_time}) toplar."""

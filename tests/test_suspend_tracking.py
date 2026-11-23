@@ -143,7 +143,7 @@ class TestPidReuse:
 
     def test_resume_when_create_time_matches(self):
         proc = MagicMock()
-        proc.create_time.return_value = 1000.3
+        proc.create_time.return_value = 1000.001
         with patch("psutil.Process", return_value=proc):
             report = ProcessManagerAgent().resume_processes([{"pid": 42, "create_time": 1000.0}])
         proc.resume.assert_called_once()
@@ -345,3 +345,46 @@ class TestSwitchResumesPreviousMode:
 
         orch._agents[0].resume_processes.assert_not_called()
         assert state_mod.get_state().suspended_pids == [10]
+
+
+class TestBundledModesMatchPlatformNames:
+    """Paketlenmiş mod YAML'ları her platformdaki gerçek süreç adlarıyla (tam eşleşme) uyuşmalı."""
+
+    @staticmethod
+    def _suspend_list(mode: str) -> list[str]:
+        import pathlib
+
+        import yaml
+
+        path = pathlib.Path(__file__).resolve().parent.parent / "modes" / f"{mode}.yaml"
+        return yaml.safe_load(path.read_text(encoding="utf-8"))["processes"]["suspend"]
+
+    @staticmethod
+    def _matches(names: list[str], proc_name: str) -> bool:
+        proc = _iter_proc(1, proc_name)
+        agent = ProcessManagerAgent()
+        with patch("psutil.process_iter", return_value=[proc]):
+            return any(agent.find_processes(name) for name in names)
+
+    @pytest.mark.parametrize(
+        "proc_name", ["chrome.exe", "Google Chrome", "google-chrome", "chrome"]
+    )
+    def test_study_suspends_chrome_on_every_platform(self, proc_name):
+        assert self._matches(self._suspend_list("study"), proc_name)
+
+    @pytest.mark.parametrize("proc_name", ["Docker Desktop.exe", "Docker Desktop", "docker"])
+    def test_gaming_suspends_docker_on_every_platform(self, proc_name):
+        assert self._matches(self._suspend_list("gaming"), proc_name)
+
+
+class TestCreateTimeTolerance:
+    def test_rapid_pid_reuse_is_rejected(self):
+        proc = MagicMock()
+        proc.create_time.return_value = 1000.5
+        assert not matches_entry(proc, {"pid": 1, "create_time": 1000.0})
+
+    def test_same_process_matches_after_json_roundtrip(self):
+        proc = MagicMock()
+        proc.create_time.return_value = 1731600000.123456
+        stored = json.loads(json.dumps({"pid": 1, "create_time": 1731600000.123456}))
+        assert matches_entry(proc, stored)

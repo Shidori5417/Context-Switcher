@@ -7,8 +7,10 @@ from typing import Any
 
 import psutil
 
-# create_time karşılaştırmasında kabul edilen sapma (saniye)
-CREATE_TIME_TOLERANCE = 1.0
+# create_time karşılaştırmasında kabul edilen sapma (saniye). Her iki değer de
+# psutil.Process.create_time()'dan geldiği için yalnızca kayan nokta/JSON gidiş-dönüş
+# hassasiyeti kadar pay bırakılır; hızlı PID yeniden kullanımı yakalanabilsin.
+CREATE_TIME_TOLERANCE = 0.01
 
 ProcEntry = dict[str, Any]
 

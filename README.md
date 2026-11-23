@@ -1,6 +1,7 @@
 # 🧠 Context-Switcher
 
 [![CI](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml/badge.svg)](https://github.com/Shidori5417/Context-Switcher/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 
 > Tek komutla çalışma ortamı geçişi: Geliştirme, Ders, Oyun modları arasında süreçleri, pencere düzenini, tarayıcıyı ve sesi birlikte değiştirir.
 

@@ -1,0 +1,7 @@
+# Read by github.com/Shidori5417 (profile README) and the portfolio site.
+# Edit when the project's state changes; no need to touch it otherwise.
+# status: active | prototype | released | maintenance | paused | archived
+status: maintenance
+focus:
+  en: "Rollback and process tracking fixes, CI with ruff."
+  tr: "Geri alma ve süreç takibi düzeltmeleri, ruff ile CI."

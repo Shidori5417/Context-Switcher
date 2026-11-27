@@ -39,7 +39,7 @@ def _set_volume_windows(level: int) -> bool:
         volume.SetMasterVolumeLevelScalar(scalar, None)
         return True
     except Exception:
-        pass
+        logger.debug("Ses seviyesi yöntemi başarısız; sonraki yöntem deneniyor", exc_info=True)
 
     # Yöntem 2: nircmd.exe (PATH'te olmalı)
     try:
@@ -52,7 +52,7 @@ def _set_volume_windows(level: int) -> bool:
         )
         return True
     except Exception:
-        pass
+        logger.debug("Ses seviyesi yöntemi başarısız; sonraki yöntem deneniyor", exc_info=True)
 
     # Yöntem 3: WINMM waveOutSetVolume
     try:

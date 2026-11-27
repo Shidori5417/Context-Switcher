@@ -135,6 +135,36 @@ class TestLayoutAgentExecute:
         assert "atlandı" in report.message
 
 
+class TestLinuxWmctrlParsing:
+    """wmctrl -l -G çıktısında başlık, boşluk içerse bile tek parça okunmalı."""
+
+    WMCTRL_OUT = (
+        "0x01000007  0 100  200  800 600 host Spotify Premium\n"
+        "0x02000003  0 0    0    1920 1080 host Visual Studio Code\n"
+        "0x03000001 -1 0    0    10 10 host Desktop\n"
+    )
+
+    def _find(self, app: str):
+        from src.agents.layout_agent import _LinuxBackend
+
+        with patch("src.agents.layout_agent.subprocess.check_output", return_value=self.WMCTRL_OUT):
+            return _LinuxBackend().find_windows(app)
+
+    def test_multi_word_title_is_kept_whole(self):
+        wins = self._find("spotify")
+        assert [w.title for w in wins] == ["Spotify Premium"]
+        w = wins[0]
+        assert (w.handle, w.x, w.y, w.width, w.height) == ("0x01000007", 100, 200, 800, 600)
+
+    def test_match_on_later_title_word(self):
+        wins = self._find("code")
+        assert [w.title for w in wins] == ["Visual Studio Code"]
+        assert wins[0].handle == "0x02000003"
+
+    def test_no_match_returns_empty(self):
+        assert self._find("firefox") == []
+
+
 class TestLayoutAgentRollback:
     def test_rollback_no_previous_mode(self):
         agent = LayoutAgent()

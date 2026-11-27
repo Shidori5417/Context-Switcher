@@ -2,11 +2,12 @@
 
 from __future__ import annotations
 
+import os
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from src.agents.process_manager import ProcessManagerAgent
+from src.agents.process_manager import ProcessManagerAgent, _split_cmd
 from src.core.event_bus import SwitchEvent
 
 
@@ -162,6 +163,20 @@ class TestStartProcesses:
         with patch("subprocess.Popen", side_effect=FileNotFoundError):
             report = agent.start_processes(["nonexistent_app"])
         assert len(report.errors) == 1
+
+
+class TestSplitCmd:
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX shlex kuralları")
+    def test_quoted_path_with_spaces_stays_one_argument(self):
+        cmd = '"/Applications/Visual Studio Code.app/Contents/MacOS/Electron" --new-window'
+        assert _split_cmd(cmd) == [
+            "/Applications/Visual Studio Code.app/Contents/MacOS/Electron",
+            "--new-window",
+        ]
+
+    @pytest.mark.skipif(os.name == "nt", reason="POSIX shlex kuralları")
+    def test_plain_command(self):
+        assert _split_cmd("code --wait") == ["code", "--wait"]
 
 
 class TestExecute:

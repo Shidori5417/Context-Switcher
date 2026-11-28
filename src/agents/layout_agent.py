@@ -91,7 +91,9 @@ class _WindowsBackend:
                         )
                     )
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Pencere/ekran bilgisi okunamadı; varsayılan kullanılıyor", exc_info=True
+                    )
 
         self._win32gui.EnumWindows(_enum_callback, None)
         return results
@@ -135,7 +137,9 @@ class _WindowsBackend:
                         {"hwnd": hwnd, "title": title, "x": x, "y": y, "w": x2 - x, "h": y2 - y}
                     )
                 except Exception:
-                    pass
+                    logger.debug(
+                        "Pencere/ekran bilgisi okunamadı; varsayılan kullanılıyor", exc_info=True
+                    )
 
             self._win32gui.EnumWindows(_cb, None)
 
@@ -169,11 +173,13 @@ class _LinuxBackend:
 
         results = []
         for line in out.splitlines():
-            parts = line.split(None, 9)
-            if len(parts) < 9:
+            # wmctrl -l -G: id desktop x y w h host <başlık>; başlık boşluk içerebilir,
+            # bu yüzden yalnızca ilk 7 alan ayrılır ve kalan metin tek parça alınır.
+            parts = line.split(None, 7)
+            if len(parts) < 8:
                 continue
             win_id, _desktop, x, y, w, h = parts[0], parts[1], *parts[2:6]
-            title = parts[-1]
+            title = parts[7]
             if app_name.lower() in title.lower():
                 results.append(
                     WindowInfo(

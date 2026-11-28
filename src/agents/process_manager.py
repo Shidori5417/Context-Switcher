@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import shlex
 import subprocess
 import sys
 from dataclasses import dataclass, field
@@ -38,6 +39,18 @@ _SYSTEM_PROCESS_NAMES = frozenset(
         "python.exe",  # Kendimizi dondurma
     }
 )
+
+
+def _split_cmd(cmd: str) -> list[str]:
+    """Komut satırını argümanlara ayırır.
+
+    POSIX'te shlex kullanılır, böylece tırnaklı boşluklu yollar
+    ("/Applications/Visual Studio Code.app/...") tek argüman olarak kalır.
+    Windows'ta yol ayırıcılar ters eğik çizgi olduğundan eski ``str.split`` davranışı korunur.
+    """
+    if os.name == "nt":
+        return cmd.split()
+    return shlex.split(cmd)
 
 
 def _strip_exe(name: str) -> str:
@@ -394,14 +407,15 @@ class ProcessManagerAgent(BaseAgent):
             return ProcessAction(pid=pid, name="?", action="error", error=f"Yetki hatası: {e}")
 
     def _start_one(self, cmd: str, dry_run: bool) -> ProcessAction:
-        exe_name = cmd.split()[0]
+        argv = _split_cmd(cmd)
+        exe_name = argv[0]
         try:
             if not dry_run:
                 # Windows özel kontrolleri ve .cmd wrapper'ı için shell=True kullanılabilir
                 # ama güvenlik açısından önce direkt çalıştırmayı deniyoruz
                 try:
                     subprocess.Popen(
-                        cmd.split(),
+                        argv,
                         stdout=subprocess.DEVNULL,
                         stderr=subprocess.DEVNULL,
                         start_new_session=True,

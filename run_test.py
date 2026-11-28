@@ -1,4 +1,7 @@
-"""Hızlı yerel test çalıştırıcı: tray ve hotkeys testlerini koşar, çıktıyı test_results.log'a yazar."""
+"""Hızlı yerel test çalıştırıcı.
+
+tray ve hotkeys testlerini koşar, çıktıyı test_results.log'a yazar.
+"""
 
 import subprocess
 import sys
@@ -6,7 +9,14 @@ import sys
 
 def run() -> None:
     result = subprocess.run(
-        [sys.executable, "-m", "pytest", "tests/test_tray.py", "tests/test_hotkeys.py", "--tb=short"],
+        [
+            sys.executable,
+            "-m",
+            "pytest",
+            "tests/test_tray.py",
+            "tests/test_hotkeys.py",
+            "--tb=short",
+        ],
         capture_output=True,
         text=True,
     )
